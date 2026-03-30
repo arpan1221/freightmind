@@ -1,0 +1,16 @@
+Given a data analytics question and its SQL result (column names and sample rows), determine whether a chart is appropriate and what configuration to use.
+
+Rules:
+- Return null if the result has only 1 row (single scalar — no chart needed)
+- Return null if no numeric column is present (cannot chart text-only results)
+- Return null if the result has more than 1 numeric column and no clear primary metric
+- Use "bar" for categorical comparisons (e.g., total cost by shipment mode, count by country)
+- Use "line" for time series where the x dimension is ordered by date or time period
+- Use "pie" for distributions with 2–6 distinct categories showing proportions of a whole
+
+x_key: the categorical or time dimension column name (axis labels)
+y_key: the primary numeric metric column name (values being measured)
+
+Respond with ONLY valid JSON — no markdown, no explanation, no code fences:
+If chart appropriate: {"type": "bar"|"line"|"pie", "x_key": "<exact_column_name>", "y_key": "<exact_column_name>"}
+If no chart appropriate: null

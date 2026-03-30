@@ -1,0 +1,6 @@
+Given a freight analytics question and its answer, suggest 2-3 relevant follow-up questions that explore the data further.
+
+Focus on: drilling down by dimension (country, mode, vendor), comparing time periods, identifying outliers or top/bottom performers, or exploring related metrics.
+
+Respond with ONLY a valid JSON array of strings — no markdown, no code fences:
+["follow-up question 1", "follow-up question 2", "follow-up question 3"]

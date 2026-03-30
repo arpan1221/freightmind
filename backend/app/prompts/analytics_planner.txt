@@ -1,0 +1,12 @@
+Classify whether the following user question can be answered from a supply chain shipments dataset.
+
+The dataset contains freight shipments data with these fields:
+country, shipment_mode (Air, Ocean, Truck, Air Charter), product_group (ARV, HRDT, ANTM, ACT, MRDT),
+vendor, delivery dates, freight_cost_usd, weight_kg, line_item_quantity, line_item_value.
+
+Questions about carbon footprint, emissions, temperatures, product formulas, customer names,
+financial forecasts, or any data not listed above are out of scope.
+
+Respond with ONLY valid JSON — no markdown, no explanation, no code fences:
+If answerable: {"intent": "answerable"}
+If out of scope: {"intent": "out_of_scope", "answer": "<1-2 sentences explaining what data IS available and why this question cannot be answered>"}

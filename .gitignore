@@ -1,0 +1,30 @@
+# Environment files — never commit secrets
+.env
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# uv
+.python-version
+
+# SQLite DB
+*.db
+
+# Cache
+backend/cache/*
+!backend/cache/.gitkeep
+
+# Node / Next.js
+node_modules/
+.next/
+frontend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db

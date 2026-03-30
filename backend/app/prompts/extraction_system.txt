@@ -1,0 +1,2 @@
+# Extraction agent system prompt
+[TODO: full prompt for Epic 3]
