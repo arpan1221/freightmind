@@ -356,7 +356,39 @@ Not modified (already implemented or out of scope):
 - `frontend/src/app/page.tsx` — tab switcher already correct
 - `frontend/src/lib/api.ts` — axios instance already correct
 
+### Senior Developer Review (AI)
+
+**Outcome:** Changes Requested
+**Date:** 2026-03-30
+**Layers run:** Blind Hunter ✓ · Edge Case Hunter ✓ · Acceptance Auditor ✓
+**Dismissed:** 6 · **Deferred:** 7 · **Action items:** 5
+
+#### Action Items
+
+- [x] [Review][Patch] Message IDs use `Date.now()` — collision possible on same-tick calls [frontend/src/hooks/useAnalytics.ts:21,42]
+- [x] [Review][Patch] Response array fields not defensively guarded — `columns`/`rows`/`suggested_questions` null/undefined crashes render [frontend/src/hooks/useAnalytics.ts:37-45]
+- [x] [Review][Patch] `schema.tables` not guarded — null/undefined response crashes DatasetStatus [frontend/src/components/DatasetStatus.tsx:18]
+- [x] [Review][Patch] Missing `aria-label` on "Ask" button (announces "…") and no `role="status"` on loading dots [frontend/src/components/ChatPanel.tsx:~145,~108]
+- [x] [Review][Patch] API-level `response.error` shown as tiny inline text, not a banner — violates AC2 / error banner constraint [frontend/src/components/ChatPanel.tsx:~65]
+- [x] [Review][Defer] No AbortController cleanup on unmount in DatasetStatus/useAnalytics — pre-existing React pattern, out of scope
+- [x] [Review][Defer] Axios structured error (`retry_after`, backend message) not surfaced — Story 5.6 scope
+- [x] [Review][Defer] ChartRenderer silent empty chart on x_key/y_key mismatch — pre-existing, not this story
+- [x] [Review][Defer] ChartRenderer no row cap before Recharts render — pre-existing, not this story
+- [x] [Review][Defer] ResultTable zero-row result hides column headers — acceptable POC UX
+- [x] [Review][Defer] `rowCount` label can show "Showing N of 0 rows" on backend count mismatch — backend data integrity issue
+- [x] [Review][Defer] `t.row_count.toLocaleString()` throws if backend sends null — Pydantic guarantees non-null int
+
+### Review Follow-ups (AI)
+
+- [x] [Review][Patch] Replace `Date.now()` IDs with `crypto.randomUUID()` [frontend/src/hooks/useAnalytics.ts]
+- [x] [Review][Patch] Add defensive array defaults: `data.columns ?? []`, `data.rows ?? []`, `data.suggested_questions ?? []` [frontend/src/hooks/useAnalytics.ts]
+- [x] [Review][Patch] Guard `schema?.tables ?? []` in DatasetStatus render [frontend/src/components/DatasetStatus.tsx]
+- [x] [Review][Patch] Add `aria-label="Send question"` to Ask button, `role="status"` + `aria-label="Loading"` to loading indicator [frontend/src/components/ChatPanel.tsx]
+- [x] [Review][Patch] Promote API-level `response.error` to use the same red banner style as network errors [frontend/src/components/ChatPanel.tsx]
+
 ## Change Log
 
 - 2026-03-30: Story 2.6 created by create-story workflow
 - 2026-03-30: Story 2.6 implemented — Chat Panel UI with full analytics interaction. `pnpm build` passes TypeScript-clean.
+- 2026-03-30: Code review complete — 5 patch findings, 7 deferred, 6 dismissed.
+- 2026-03-30: All 5 review patches applied. `pnpm build` passes TypeScript-clean.

@@ -37,6 +37,7 @@
 generated: 2026-03-30
 last_updated: 2026-03-30
 project: freightmind
+# Epic 4 complete (2026-03-30): 4-1–4-3 done; Epic 5 (2026-03-31): 5-1–5-6 done, retro 2026-03-30; Epic 6 complete (2026-03-31): 6-1–6-5 done
 project_key: NOKEY
 
 
@@ -45,12 +46,13 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
 
+
   # ─────────────────────────────────────────────────────────────────────────────
   # Epic 1: Project Foundation & Running System
   # Goal: Running backend with health check, DB init, CSV load, prompt config,
   #       and response cache. All other epics depend on this.
   # ─────────────────────────────────────────────────────────────────────────────
-  epic-1: in-progress
+  epic-1: done
   1-1-scaffold-backend-project-with-uv-fastapi-and-docker: done
   1-2-auto-create-database-schema-and-indexes-on-startup: done
   1-3-auto-load-scms-csv-into-shipments-table-on-cold-start: done
@@ -58,73 +60,73 @@ development_status:
   1-5-prompt-registry-all-prompt-templates-as-txt-files: done
   1-6-modelclient-with-file-based-sha-256-response-cache: done
   1-7-scaffold-frontend-project-with-nextjs-typescript-tailwind-and-docker: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Epic 2: Analytics Agent — Natural Language Queries
   # Goal: NL question → SQL-backed answer with table, chart, follow-ups, SQL transparency
   # Depends on: Epic 1
   # ─────────────────────────────────────────────────────────────────────────────
-  epic-2: in-progress
+  epic-2: done
   2-1-analytics-pipeline-post-api-query-planner-executor-verifier: done
   2-2-out-of-scope-detection-null-surfacing-and-follow-up-suggestions: done
   2-3-chart-configuration-generation: done
-  2-4-stateless-follow-up-query-with-previous-sql-context: review
-  2-5-schema-endpoint-get-api-schema: review
-  2-6-chat-panel-ui-full-analytics-interaction: review
-  2-7-analytics-agent-standalone-invocability: review
-  epic-2-retrospective: optional
+  2-4-stateless-follow-up-query-with-previous-sql-context: done
+  2-5-schema-endpoint-get-api-schema: done
+  2-6-chat-panel-ui-full-analytics-interaction: done
+  2-7-analytics-agent-standalone-invocability: done
+  epic-2-retrospective: done
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Epic 3: Document Processing — Extract, Review & Confirm
   # Goal: Upload freight docs, review extracted fields with confidence, confirm or cancel
   # Depends on: Epic 1
   # ─────────────────────────────────────────────────────────────────────────────
-  epic-3: backlog
-  3-1-file-upload-endpoint-post-extract: backlog
-  3-2-normalisation-layer-mode-country-date-and-weight: backlog
-  3-3-confidence-scoring-per-field: backlog
-  3-4-confirm-endpoint-post-confirm-extraction-id: backlog
-  3-5-cancel-endpoint-delete-extract-extraction-id: backlog
-  3-6-extracted-documents-list-get-extractions: backlog
-  3-7-upload-panel-ui-drag-and-drop-review-table-confidence-badges-edit-confirm-cancel: backlog
-  3-8-vision-extraction-standalone-invocability: backlog
-  epic-3-retrospective: optional
+  epic-3: done
+  3-1-file-upload-endpoint-post-extract: done
+  3-2-normalisation-layer-mode-country-date-and-weight: done
+  3-3-confidence-scoring-per-field: done
+  3-4-confirm-endpoint-post-confirm-extraction-id: done
+  3-5-cancel-endpoint-delete-extract-extraction-id: done
+  3-6-extracted-documents-list-get-extractions: done
+  3-7-upload-panel-ui-drag-and-drop-review-table-confidence-badges-edit-confirm-cancel: done
+  3-8-vision-extraction-standalone-invocability: done
+  epic-3-retrospective: done
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Epic 4: End-to-End Data Linkage
   # Goal: UNION/JOIN queries spanning shipments + extracted_documents
   # Depends on: Epics 2 + 3
   # ─────────────────────────────────────────────────────────────────────────────
-  epic-4: backlog
-  4-1-schema-aware-planner-both-tables-in-analytics-prompt-context: backlog
-  4-2-cross-table-query-execution-and-combined-response: backlog
-  4-3-sql-transparency-for-linkage-queries-in-the-ui: backlog
-  epic-4-retrospective: optional
+  epic-4: done
+  4-1-schema-aware-planner-both-tables-in-analytics-prompt-context: done
+  4-2-cross-table-query-execution-and-combined-response: done
+  4-3-sql-transparency-for-linkage-queries-in-the-ui: done
+  epic-4-retrospective: done
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Epic 5: Failure Handling & Resilience
   # Goal: Structured errors for all failure paths — no unhandled exceptions
   # Depends on: Epics 2 + 3
   # ─────────────────────────────────────────────────────────────────────────────
-  epic-5: backlog
-  5-1-fastapi-global-error-handler-errorresponse-envelope: backlog
-  5-2-modelclient-retry-with-corrective-instruction: backlog
-  5-3-rate-limit-detection-and-structured-response-with-retry-after: backlog
-  5-4-invalid-or-unsafe-sql-structured-error-with-failed-query: backlog
-  5-5-automatic-fallback-model-on-primary-model-failure: backlog
-  5-6-error-toast-ui-with-countdown-timer: backlog
-  epic-5-retrospective: optional
+  epic-5: done
+  5-1-fastapi-global-error-handler-errorresponse-envelope: done
+  5-2-modelclient-retry-with-corrective-instruction: done
+  5-3-rate-limit-detection-and-structured-response-with-retry-after: done
+  5-4-invalid-or-unsafe-sql-structured-error-with-failed-query: done
+  5-5-automatic-fallback-model-on-primary-model-failure: done
+  5-6-error-toast-ui-with-countdown-timer: done
+  epic-5-retrospective: done
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Epic 6: Deployment & Demo Readiness
   # Goal: Docker Compose, Vercel + Render deploy, README, demo invoices, demo script
   # Depends on: Epics 1–5
   # ─────────────────────────────────────────────────────────────────────────────
-  epic-6: backlog
-  6-1-docker-compose-single-command-local-startup: backlog
-  6-2-backend-deployment-to-render: backlog
-  6-3-frontend-deployment-to-vercel: backlog
-  6-4-synthetic-freight-invoice-demo-files: backlog
-  6-5-readme-with-architecture-overview-setup-guide-and-demo-script: backlog
-  epic-6-retrospective: optional
+  epic-6: done
+  6-1-docker-compose-single-command-local-startup: done
+  6-2-backend-deployment-to-render: done
+  6-3-frontend-deployment-to-vercel: done
+  6-4-synthetic-freight-invoice-demo-files: done
+  6-5-readme-with-architecture-overview-setup-guide-and-demo-script: done
+  epic-6-retrospective: done

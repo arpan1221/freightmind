@@ -253,19 +253,23 @@ result = session.execute(text(generated_sql))
 | Cache persistence | `cache/` volume in Docker Compose | Cache survives container restarts locally; committed for demo reproducibility option |
 
 **Docker Compose structure:**
+
+Evaluator setup: copy **repo root** `.env.example` to `.env` and set `OPENROUTER_API_KEY` (same file is referenced by Compose as `env_file: .env`). The frontend image is built with `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000` so **browser** requests hit the published backend port on the host (not the Docker service hostname).
+
 ```yaml
 services:
   backend:
     build: ./backend
     ports: ["8000:8000"]
-    env_file: ./backend/.env
+    env_file: .env
     volumes:
       - ./backend/cache:/app/cache
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     ports: ["3000:3000"]
-    environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
     depends_on: [backend]
 ```
 

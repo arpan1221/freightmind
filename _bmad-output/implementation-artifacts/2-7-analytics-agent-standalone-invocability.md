@@ -1,6 +1,6 @@
 # Story 2.7: Analytics agent standalone invocability
 
-Status: review
+Status: done
 
 ## Story
 
@@ -31,6 +31,18 @@ So that I can develop and debug the analytics pipeline in isolation.
 - [x] Task 2: Guard against future cross-module contamination (AC: 1, 2)
   - [x] Add a comment block at the top of `backend/app/agents/analytics/__init__.py` documenting the isolation contract
   - [x] Add a module-level assertion test in the test file that re-imports each analytics module file in a subprocess and checks no extraction symbols are imported
+
+### Review Findings
+
+- [x] [Review][Decision] `sys.modules` assertions vs AST-only approach — Chose (a): AST static analysis accepted as sufficient. `sys.modules` assertions would always fail in the normal test suite run because other test files load `app.main` (which imports extraction models) before test_story_2_7.py runs. AST analysis provably satisfies spec intent. [backend/tests/test_story_2_7.py:30-38]
+
+- [x] [Review][Patch] Duplicate entries in `_ANALYTICS_MODULE_PATHS` — `verifier.py` and `app/api/routes/analytics.py` each appear twice in the list; only 4 distinct files are scanned, not 6. [backend/tests/test_story_2_7.py:32-38]
+- [x] [Review][Patch] Relative `pathlib.Path` objects in `_ANALYTICS_MODULE_PATHS` resolve against cwd — Fixed: anchored with `_BACKEND_ROOT = pathlib.Path(__file__).parent.parent`. [backend/tests/test_story_2_7.py:32-38]
+
+- [x] [Review][Defer] `_make_mock_client` side_effect list has no guard against pipeline call-count changes — if a 7th LLM call is added, the mock raises `StopAsyncIteration` instead of a clear assertion error. [backend/tests/test_story_2_7.py:80-90] — deferred, pre-existing pattern across all story tests
+- [x] [Review][Defer] AST scan misses `importlib.import_module()` dynamic imports — speculative; no dynamic imports exist in the codebase. — deferred, speculative future risk
+- [x] [Review][Defer] Incomplete in-memory schema (5 cols vs full shipments model) — intentional for this test; mock SQL is `COUNT(*)` only. — deferred, by design
+- [x] [Review][Defer] `os.environ.setdefault` doesn't affect already-instantiated `settings` singleton — pre-existing pattern used in every test file. — deferred, pre-existing pattern
 
 ## Dev Notes
 

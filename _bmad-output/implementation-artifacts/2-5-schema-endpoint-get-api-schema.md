@@ -1,6 +1,6 @@
 # Story 2.5: Schema Endpoint — GET /api/schema
 
-Status: review
+Status: done
 
 ## Story
 
@@ -46,6 +46,19 @@ So that I can inspect what data is available and verify the system loaded correc
   - [x] Test: `row_count` matches the actual number of rows in the in-memory test DB
   - [x] Test: `sample_values` for a seeded column returns the correct distinct values
   - [x] Test: Endpoint appears in OpenAPI spec (`GET /openapi.json` includes `/api/schema`)
+
+### Review Findings
+
+- [x] [Review][Patch] Silent exception handlers in `get_schema` have no logging [backend/app/api/routes/system.py:~65,73] — both `except Exception: row_count = 0` and `except Exception: sample_values = []` silently discard errors; add `logger.debug` consistent with `_count_null_exclusions` pattern in analytics.py
+
+- [x] [Review][Defer] SQL f-string interpolation for identifiers [backend/app/api/routes/system.py:~65,71] — deferred, pre-existing pattern project-wide; ORM-controlled names, double-quote mitigation in place, not user input
+- [x] [Review][Defer] No authentication on `/schema` endpoint — deferred, pre-existing; auth is out of scope for this story and not implemented anywhere in the project
+- [x] [Review][Defer] `_check_model` and health DB block swallow exceptions without logging root cause [backend/app/api/routes/system.py:~26,42] — deferred, pre-existing health check code not changed by this story
+- [x] [Review][Defer] `SessionLocal()` UnboundLocalError risk if constructor raises [backend/app/api/routes/system.py:~35] — deferred, pre-existing health check behavior
+- [x] [Review][Defer] `sample_values: list` bare typing (no `list[Any]`) [backend/app/schemas/schema_info.py:5] — deferred, intentionally specified in dev notes for mixed-type columns
+- [x] [Review][Defer] `Base.metadata.tables` can enumerate tables not yet migrated during rolling deploys — deferred, inherent to spec-prescribed approach; not fixable without changing architecture
+- [x] [Review][Defer] API key sent in Authorization header on every health probe — deferred, pre-existing health check behavior not changed by this story
+- [x] [Review][Defer] `setup_method` teardown pattern — deferred, established project convention used across all story tests
 
 ## Dev Notes
 

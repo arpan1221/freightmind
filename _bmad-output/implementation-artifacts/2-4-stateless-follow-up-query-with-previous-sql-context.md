@@ -1,6 +1,6 @@
 # Story 2.4: Stateless Follow-Up Query with Previous SQL Context
 
-Status: review
+Status: done
 
 ## Story
 
@@ -347,7 +347,18 @@ Modified:
 New:
 - `backend/tests/test_story_2_4.py` — tests for planner context and route integration
 
+### Review Findings
+
+- [x] [Review][Decision] Hook returns `messages: Message[]` instead of spec's `result: AnalyticsQueryResponse | null` — resolved: keep expanded design; `messages[]` conversation history is intentional for chat panel UI (Story 2.6)
+- [x] [Review][Patch] Message IDs generated with `Date.now()` are not unique under rapid or concurrent calls [`frontend/src/hooks/useAnalytics.ts:22,41`] — fixed: replaced with `crypto.randomUUID()`
+- [x] [Review][Defer] No guard against concurrent `query()` calls while `isQuerying === true` [`frontend/src/hooks/useAnalytics.ts:28`] — deferred, UI responsibility to disable submit button
+- [x] [Review][Defer] `reset()` does not cancel in-flight requests; a pending API call will still append to `messages` after reset [`frontend/src/hooks/useAnalytics.ts:57`] — deferred, requires `AbortController`, pre-existing UX pattern
+- [x] [Review][Defer] `previousSql` exposed in hook return leaks internal implementation detail [`frontend/src/hooks/useAnalytics.ts:64`] — deferred, spec explicitly requires it in return; revisit at Epic 2 completion
+- [x] [Review][Defer] `classify_intent` exception handling uses broad `ValueError` catch and returns soft-failure dict — deferred, pre-existing Story 2.2 behaviour, not introduced by this story
+- [x] [Review][Defer] Test message extraction pattern `call_kwargs.kwargs.get("messages") or call_kwargs.args[1]` is fragile if call signature changes — deferred, pre-existing project testing convention
+
 ## Change Log
 
 - 2026-03-30: Story 2.4 created by create-story workflow
 - 2026-03-30: Story 2.4 implemented, status → review
+- 2026-03-30: Code review complete — 1 decision (kept messages[] design), 1 patch (crypto.randomUUID), 5 defer, 18 dismissed
