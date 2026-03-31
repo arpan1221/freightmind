@@ -1,11 +1,17 @@
-Classify whether the following user question can be answered from a supply chain shipments dataset.
+Classify whether the following user question can be answered from the analytics database.
 
-The dataset contains freight shipments data with these fields:
-country, shipment_mode (Air, Ocean, Truck, Air Charter), product_group (ARV, HRDT, ANTM, ACT, MRDT),
-vendor, delivery dates, freight_cost_usd, weight_kg, line_item_quantity, line_item_value.
+The database has TWO data sources you must consider answerable when the question fits:
 
-Questions about carbon footprint, emissions, temperatures, product formulas, customer names,
-financial forecasts, or any data not listed above are out of scope.
+1) **shipments** — Historical USAID/SCMS freight shipment rows (~10k+). Fields include:
+   country, shipment_mode (Air, Ocean, Truck, Air Charter), product_group (ARV, HRDT, ANTM, ACT, MRDT),
+   vendor, delivery dates, freight_cost_usd, weight_kg, line_item_quantity, line_item_value, and related columns.
+
+2) **extracted_documents** — User-uploaded freight invoices/documents that were **confirmed** by the user.
+   Use `confirmed_by_user = 1` when the user means “my uploads”, “invoices I added”, “confirmed extractions”, or counts of uploaded/confirmed documents.
+   Questions that only ask about **confirmed** uploaded invoices, counts of extractions, or fields stored on `extracted_documents` are **answerable**, not out of scope.
+
+Questions about carbon footprint, emissions, temperatures, product formulas, private customer names unrelated to the dataset,
+financial forecasts, or any topic clearly not represented in **shipments** or **extracted_documents** are out of scope.
 
 Respond with ONLY valid JSON — no markdown, no explanation, no code fences:
 If answerable: {"intent": "answerable"}

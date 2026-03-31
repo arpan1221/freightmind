@@ -1,0 +1,1 @@
+Your previous response was not valid. Follow the instructions in the prior system and user messages exactly. If you were asked for JSON only, return a single valid JSON object and nothing else — no markdown fences, no commentary.

@@ -2,18 +2,21 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.config import cors_allow_origins_list, settings
 from app.core.csv_loader import CSV_PATH, load_shipments_from_csv
+from app.core.exceptions import ModelUnavailableError, RateLimitError
 from app.core.database import SessionLocal, init_db
 # Import models before init_db() so Base.metadata registers all tables
 import app.models.shipment  # noqa: F401
 import app.models.extracted_document  # noqa: F401
 import app.models.extracted_line_item  # noqa: F401
 from app.schemas.common import ErrorResponse
-from app.api.routes import analytics, system
+from app.api.routes import analytics, documents, extraction, system
 
 logger = logging.getLogger(__name__)
 
@@ -40,23 +43,77 @@ app = FastAPI(title="FreightMind API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_allow_origins_list(settings),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 @app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    msg = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
-            error="http_error",
-            message=exc.detail if isinstance(exc.detail, str) else str(exc.detail),
-            retry_after=None,
+            error_type="http_error",
+            message=msg,
+            detail={"status_code": exc.status_code},
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=ErrorResponse(
+            error_type="validation_error",
+            message="Request validation failed",
+            detail={"errors": exc.errors()},
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_error_handler(request: Request, exc: RateLimitError) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content=ErrorResponse(
+            error_type="rate_limit",
+            message=exc.message,
+            retry_after=exc.retry_after,
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(ModelUnavailableError)
+async def model_unavailable_error_handler(
+    request: Request, exc: ModelUnavailableError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content=ErrorResponse(
+            error_type="model_unavailable",
+            message=exc.message,
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content=ErrorResponse(
+            error_type="internal_error",
+            message="An unexpected error occurred. Please try again later.",
         ).model_dump(),
     )
 
 
 app.include_router(system.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+app.include_router(documents.router, prefix="/api")
+app.include_router(extraction.router, prefix="/api")

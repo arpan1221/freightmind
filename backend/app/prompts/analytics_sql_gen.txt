@@ -1,6 +1,10 @@
-Generate a single valid SQLite SELECT query for the 'shipments' table based on the user's question.
+Generate a single valid SQLite SELECT query (or a single statement using UNION ALL / subqueries) based on the user's question.
 
-Table: shipments
+You may query **shipments**, **extracted_documents**, and **extracted_line_items** as needed.
+
+---
+
+Table: **shipments**
 Columns: id INTEGER, project_code TEXT, pq_number TEXT, po_so_number TEXT, asn_dn_number TEXT,
 country TEXT, managed_by TEXT, fulfill_via TEXT, vendor_inco_term TEXT, shipment_mode TEXT,
 pq_first_sent_to_client_date TEXT, po_sent_to_vendor_date TEXT, scheduled_delivery_date TEXT,
@@ -11,11 +15,45 @@ line_item_quantity INTEGER, line_item_value REAL, pack_price REAL, unit_price RE
 manufacturing_site TEXT, first_line_designation TEXT, weight_kg REAL,
 freight_cost_usd REAL, line_item_insurance_usd REAL
 
+---
+
+Table: **extracted_documents**
+Columns: id INTEGER, source_filename TEXT, invoice_number TEXT, invoice_date TEXT,
+shipper_name TEXT, consignee_name TEXT, origin_country TEXT, destination_country TEXT,
+shipment_mode TEXT, carrier_vendor TEXT, total_weight_kg REAL, total_freight_cost_usd REAL,
+total_insurance_usd REAL, payment_terms TEXT, delivery_date TEXT,
+extraction_confidence REAL, extracted_at TEXT, confirmed_by_user INTEGER
+
+When the user asks about **their** uploaded/confirmed invoice data, use **confirmed_by_user = 1**.
+For pending-only review rows (not yet confirmed), use **confirmed_by_user = 0** only if they explicitly ask for unconfirmed/pending uploads.
+
+---
+
+Table: **extracted_line_items**
+Columns: id INTEGER, document_id INTEGER, description TEXT, quantity INTEGER,
+unit_price REAL, total_price REAL, confidence REAL
+Foreign key: document_id → extracted_documents.id
+
+Join **extracted_line_items** to **extracted_documents** ON extracted_line_items.document_id = extracted_documents.id when the question needs line-item detail. Prefer **confirmed_by_user = 1** on the document unless the question says otherwise.
+
+---
+
 Rules:
 1. Output ONLY the raw SQL — no markdown, no code fences, no explanation
-2. Use only SELECT statements — never DROP, DELETE, UPDATE, INSERT, or ALTER
-3. Always add WHERE freight_cost_usd IS NOT NULL when computing averages or sums on freight cost
-4. Always add WHERE weight_kg IS NOT NULL when computing averages or sums on weight
-5. Use strftime('%Y', scheduled_delivery_date) for year-based grouping on date columns
-6. Limit result rows to 100 unless the user asks for all records
-7. Use exact column names as listed above — do not invent column names
+2. Use only read-only SELECT (including UNION ALL / subqueries) — never DROP, DELETE, UPDATE, INSERT, ALTER, CREATE, REPLACE, ATTACH, PRAGMA, EXEC
+3. For **shipments**: add WHERE freight_cost_usd IS NOT NULL when computing averages or sums on freight cost; same for weight_kg when aggregating weight
+4. Use strftime('%Y', scheduled_delivery_date) for year-based grouping on **shipments** date columns
+5. Limit result rows to 100 unless the user asks for all records
+6. Use exact column names as listed — do not invent column names
+7. For linkage across sources, align **destination_country** / **shipment_mode** vocabulary with **shipments** when comparing to the historical dataset
+
+8. **Cross-table comparison (Story 4.2 / FR27):** When the user compares or combines **historical SCMS shipments** with **their confirmed uploads**, emit a single statement that references **both** `shipments` and `extracted_documents` using **UNION ALL** (often with a literal `source` or `dataset` column) or a **JOIN** on comparable dimensions (e.g. `shipment_mode`, `destination_country`). Filter confirmed uploads with `confirmed_by_user = 1` unless they ask for pending rows.
+
+Example pattern (adapt column names and filters to the question):
+SELECT 'dataset' AS source, AVG(freight_cost_usd) AS avg_freight
+FROM shipments WHERE shipment_mode = 'Air' AND freight_cost_usd IS NOT NULL
+UNION ALL
+SELECT 'extracted' AS source, AVG(total_freight_cost_usd)
+FROM extracted_documents WHERE shipment_mode = 'Air' AND confirmed_by_user = 1
+
+9. Prefer **UNION ALL** when returning parallel aggregates from two tables; use **JOIN** when the question needs a single merged row set with aligned keys.

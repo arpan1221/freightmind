@@ -41,12 +41,12 @@ class TestHttpExceptionOverride:
         response = client.get("/nonexistent-route-xyz")
         assert response.status_code == 404
         body = response.json()
-        # Must NOT be FastAPI default {"detail": "Not Found"}
-        assert "detail" not in body
-        # Must match ErrorResponse schema
-        assert "error" in body
+        # Story 5.1: ErrorResponse envelope (not bare {"detail": "Not Found"} only)
+        assert body.get("error") is True
+        assert body.get("error_type") == "http_error"
         assert "message" in body
         assert "retry_after" in body
+        assert isinstance(body.get("detail"), dict)
 
 
 class TestCorsHeaders:
@@ -85,15 +85,24 @@ class TestSettings:
 
 
 class TestErrorResponseSchema:
-    def test_error_response_all_fields_optional_except_none(self):
+    def test_error_response_defaults_and_fields(self):
         from app.schemas.common import ErrorResponse
-        er = ErrorResponse()
-        assert er.error is None
-        assert er.message is None
-        assert er.retry_after is None
 
-    def test_error_response_accepts_values(self):
-        from app.schemas.common import ErrorResponse
-        er = ErrorResponse(error="http_error", message="Not Found", retry_after=None)
-        assert er.error == "http_error"
+        er = ErrorResponse(error_type="http_error", message="Not Found")
+        assert er.error is True
+        assert er.error_type == "http_error"
         assert er.message == "Not Found"
+        assert er.retry_after is None
+        assert er.detail is None
+
+    def test_error_response_with_optional_detail(self):
+        from app.schemas.common import ErrorResponse
+
+        er = ErrorResponse(
+            error_type="validation_error",
+            message="Bad input",
+            detail={"errors": []},
+            retry_after=30,
+        )
+        assert er.retry_after == 30
+        assert er.detail == {"errors": []}

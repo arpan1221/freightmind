@@ -3,7 +3,7 @@ Tests for Story 2.1 — Analytics pipeline: POST /api/query (Planner → Executo
 
 Verifies:
 - AC1: POST /api/query returns HTTP 200 with answer, sql, columns, rows, row_count
-- AC2: Verifier rejects DROP/DELETE/UPDATE/INSERT/ALTER; route returns error="unsafe_sql" (never executes)
+- AC2: Verifier rejects DROP/DELETE/UPDATE/INSERT/ALTER; route returns ErrorResponse unsafe_sql / 400 (never executes)
 - AC3: DB execution uses session.execute(text(...)) — not ORM
 - AC4: No raw user input is present in the executed SQL string (NFR7)
 """
@@ -208,7 +208,7 @@ class TestPostQueryRoute:
         assert ["Air", 1000.0] in body["rows"]
 
     def test_unsafe_sql_returns_error_not_executed(self):
-        """AC2: Verifier rejects DROP/DELETE/etc. Returns error='unsafe_sql', sql never executed."""
+        """AC2: Verifier rejects DROP/DELETE/etc. Returns ErrorResponse unsafe_sql / 400; sql never executed."""
         _, factory = _make_in_memory_db()
         client = _get_test_client_with_db(factory)
 
@@ -222,12 +222,12 @@ class TestPostQueryRoute:
         with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
             response = client.post("/api/query", json={"question": "drop all data"})
 
-        assert response.status_code == 200
+        assert response.status_code == 400
         body = response.json()
-        assert body["error"] == "unsafe_sql"
-        assert body["sql"] == ""
-        assert body["rows"] == []
-        assert body["row_count"] == 0
+        assert body["error"] is True
+        assert body["error_type"] == "unsafe_sql"
+        assert body["detail"]["sql"] == "DROP TABLE shipments"
+        assert "message" in body
 
     @pytest.mark.parametrize("keyword", ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER"])
     def test_each_unsafe_keyword_blocked(self, keyword):
@@ -245,8 +245,8 @@ class TestPostQueryRoute:
         with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
             response = client.post("/api/query", json={"question": "bad question"})
 
-        assert response.status_code == 200
-        assert response.json()["error"] == "unsafe_sql"
+        assert response.status_code == 400
+        assert response.json()["error_type"] == "unsafe_sql"
 
     def test_question_not_in_executed_sql(self):
         """AC4: NFR7 guard — raw user input (question text) must not appear in the executed SQL."""

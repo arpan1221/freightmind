@@ -279,7 +279,8 @@ class TestRouteOutOfScope:
 # ---------------------------------------------------------------------------
 
 class TestRouteErrorPaths:
-    def test_unsafe_sql_suggested_questions_empty(self):
+    def test_unsafe_sql_returns_error_envelope_not_analytics_body(self):
+        """Unsafe SQL returns ErrorResponse (Story 5.4), not AnalyticsQueryResponse with suggested_questions."""
         from app.main import app
         from fastapi.testclient import TestClient
 
@@ -301,10 +302,12 @@ class TestRouteErrorPaths:
 
             resp = http.post("/api/query", json={"question": "drop table"})
 
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         body = resp.json()
-        assert body["error"] == "unsafe_sql"
-        assert body["suggested_questions"] == []
+        assert body["error"] is True
+        assert body["error_type"] == "unsafe_sql"
+        assert body["detail"]["sql"] == "DROP TABLE shipments"
+        assert "suggested_questions" not in body
 
     def test_query_failed_suggested_questions_empty(self):
         from app.main import app

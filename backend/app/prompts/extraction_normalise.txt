@@ -1,2 +1,21 @@
-# Mode/country vocabulary for normalisation
-[TODO: full prompt for Epic 3]
+Normalisation vocabulary for freight document extraction.
+
+SHIPMENT MODE — map to exactly one of these four values:
+- Air  (variants: air freight, airfreight, by air, airplane, aircraft)
+- Ocean  (variants: sea, by sea, ocean freight, sea freight, ship, vessel, maritime)
+- Truck  (variants: road, road freight, land, ground, lorry, overland)
+- Air Charter  (variants: charter, chartered air, air-charter)
+
+COUNTRY NAMES — map to exactly one of these 15 dataset values:
+Nigeria, South Africa, Côte d'Ivoire, Uganda, Zambia, Congo (DRC),
+Tanzania, Mozambique, Kenya, Ethiopia, Zimbabwe, Haiti, Rwanda, Vietnam, Guyana
+
+Common aliases:
+- DRC / DR Congo / Democratic Republic of the Congo → Congo (DRC)
+- Ivory Coast / Cote d'Ivoire → Côte d'Ivoire
+
+DATE FORMAT — always output as YYYY-MM-DD (ISO 8601)
+Examples: "March 5, 2024" → "2024-03-05", "05/03/24" → "2024-03-05"
+
+WEIGHT — always output as numeric kilograms
+Conversions: 1 lb = 0.453592 kg, 1 tonne = 1000 kg, 1 g = 0.001 kg, 1 oz = 0.0283495 kg

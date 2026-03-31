@@ -59,7 +59,8 @@ async def get_schema(db: Session = Depends(get_db)) -> SchemaInfoResponse:
     for table_name, table in Base.metadata.tables.items():
         try:
             row_count = db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0
-        except Exception:
+        except Exception as e:
+            logger.debug("get_schema: failed to count rows for table %r: %s", table_name, e)
             row_count = 0
 
         columns = []
@@ -72,7 +73,8 @@ async def get_schema(db: Session = Depends(get_db)) -> SchemaInfoResponse:
                     )
                 )
                 sample_values = [row[0] for row in result.fetchall()]
-            except Exception:
+            except Exception as e:
+                logger.debug("get_schema: failed to sample column %r on table %r: %s", col.name, table_name, e)
                 sample_values = []
             columns.append(ColumnInfo(column_name=col.name, sample_values=sample_values))
 

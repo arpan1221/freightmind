@@ -1,3 +1,9 @@
+"""Read-only SQL guard for analytics.
+
+Multi-table SELECT (UNION ALL, JOIN across ``shipments`` and ``extracted_documents``) is
+allowed. Any write/DDL keyword is rejected regardless of which table it names — cross-table
+analytics must remain SELECT-only (NFR8 / Epic 5 alignment).
+"""
 import re
 
 # Block write/DDL/admin keywords. ATTACH and PRAGMA are SQLite-specific risks

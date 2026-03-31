@@ -37,13 +37,16 @@ class AnalyticsPlanner:
             {"role": "system", "content": planner_prompt},
             {"role": "user", "content": question},
         ]
-        raw = await self._client.call(
-            model=settings.analytics_model, messages=messages, temperature=0.0
-        )
         try:
+            raw = await self._client.call(
+                model=settings.analytics_model,
+                messages=messages,
+                temperature=0.0,
+                validate=lambda s: json.loads(s.strip()),
+            )
             return json.loads(raw.strip())
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("classify_intent JSON parse failed: %s", raw[:100])
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("classify_intent JSON parse failed after retries: %s", e)
             return {
                 "intent": "classification_failed",
                 "answer": "Unable to classify your question. Please rephrase and try again.",

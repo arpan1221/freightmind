@@ -1,2 +1,40 @@
-# 14-field extraction instructions
-[TODO: full prompt for Epic 3]
+Extract the following 13 header fields and any line items from this freight invoice image.
+
+For each field, return a JSON object with "value" and "confidence". Set confidence to:
+- "HIGH" — field is clearly visible and unambiguous
+- "MEDIUM" — field is present but partially obscured, truncated, or inferred
+- "LOW" — field is very hard to read, guessed, or uncertain
+- "NOT_FOUND" — field is absent from the document; set value to null
+
+Return ONLY this JSON structure (no markdown, no code fences):
+{
+  "invoice_number": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "invoice_date": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "shipper_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "consignee_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "origin_country": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "destination_country": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "shipment_mode": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "carrier_vendor": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "total_weight_kg": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "total_freight_cost_usd": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "total_insurance_usd": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "payment_terms": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "delivery_date": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "line_items": [
+    {
+      "description": string | null,
+      "quantity": number | null,
+      "unit_price": number | null,
+      "total_price": number | null,
+      "confidence": "HIGH" | "MEDIUM" | "LOW"
+    }
+  ]
+}
+
+Rules:
+- invoice_date and delivery_date: extract as shown, do not convert format
+- shipment_mode: extract as shown, do not normalise
+- total_weight_kg: extract as a number in kg; if given in lbs or tonnes, do NOT convert
+- line_items: empty array [] if no line items visible
+- line_items confidence: never use NOT_FOUND for line items; use LOW if uncertain

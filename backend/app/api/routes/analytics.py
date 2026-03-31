@@ -3,7 +3,9 @@ import logging
 import re
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.agents.analytics.executor import AnalyticsExecutor
@@ -11,8 +13,14 @@ from app.agents.analytics.planner import AnalyticsPlanner
 from app.agents.analytics.verifier import AnalyticsVerifier
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.exceptions import ModelUnavailableError, RateLimitError
 from app.core.prompts import load_prompt
-from app.schemas.analytics import AnalyticsQueryRequest, AnalyticsQueryResponse, ChartConfig
+from app.schemas.analytics import (
+    AnalyticsQueryRequest,
+    AnalyticsQueryResponse,
+    ChartConfig,
+)
+from app.schemas.common import ErrorResponse
 from app.services.model_client import ModelClient
 
 router = APIRouter()
@@ -20,25 +28,164 @@ logger = logging.getLogger(__name__)
 
 _MAX_ROWS_IN_ANSWER_CONTEXT = 5
 _MAX_RESPONSE_ROWS = 200  # hard cap: prevents huge responses if LLM omits LIMIT
+
+# Stable error_type values (Story 5.4 / FR32) — also documented on POST /api/query OpenAPI.
+ERROR_TYPE_UNSAFE_SQL = "unsafe_sql"
+ERROR_TYPE_SQL_EXECUTION = "sql_execution_error"
+ERROR_TYPE_DATABASE_UNAVAILABLE = "database_unavailable"
+
+_MSG_UNSAFE_SQL = (
+    "The generated query was not allowed. Only read-only SELECT queries are permitted."
+)
+_MSG_SQL_EXECUTION = (
+    "The generated SQL could not be executed. Try rephrasing your question."
+)
+_MSG_DATABASE_UNAVAILABLE = (
+    "The database could not run this query right now. Try again in a moment."
+)
 _NULL_COL_RE = re.compile(r"(\w+)\s+IS\s+NOT\s+NULL", re.IGNORECASE)
 _SQL_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
-@router.post("/query", response_model=AnalyticsQueryResponse)
+def _sql_crosses_shipments_and_extracted(sql: str) -> bool:
+    """True if generated SQL references both linkage tables (Story 4.2 cross-table path).
+
+    Strips comments first — same idea as `_count_null_exclusions` — so table names in
+    ``--`` / ``/* */`` fragments do not alone trigger linkage narrative.
+    """
+    sql_no_comments = _SQL_BLOCK_COMMENT_RE.sub("", _SQL_LINE_COMMENT_RE.sub("", sql))
+    s = sql_no_comments.lower()
+    return "shipments" in s and "extracted_documents" in s
+
+
+# Heuristics for "upload / invoice / extraction" questions when no confirmed rows exist (Story 4.1 AC2).
+# Tight patterns avoid false positives (e.g. "confirmed delivery" on shipments).
+_DOC_QUESTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(how many|count)\b.*\b(invoice|upload|extraction)s?\b", re.IGNORECASE
+    ),
+    re.compile(
+        r"\b(uploaded?|my)\b.*\b(invoice|invoices|document|documents|file|files)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bextracted\s+document", re.IGNORECASE),
+    re.compile(
+        r"\b(invoice|invoices)\s+(have|did)\s+i\s+(upload|add|confirm)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(confirmed|confirm)\s+(invoice|upload|extraction|document)s?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(invoice|upload|extraction)\s+data\b", re.IGNORECASE),
+    re.compile(r"\bhow\s+many\s+invoices?\b", re.IGNORECASE),
+    # "List my extractions" / "show extractions" without saying "invoice"
+    re.compile(r"\b(my|our|the)\s+extractions?\b", re.IGNORECASE),
+    re.compile(r"\b(list|show)\b.*\bextractions?\b", re.IGNORECASE),
+    # Upload-centric phrasing without "invoice" / "document" (Story 4.1 follow-up)
+    re.compile(r"\bmy\s+uploads?\b", re.IGNORECASE),
+    re.compile(
+        r"\b(what|which)\s+(did|have|was)\s+(i|we)\s+upload",
+        re.IGNORECASE,
+    ),
+)
+
+
+def _question_targets_extracted_documents(question: str) -> bool:
+    """True if the analyst is likely asking about uploads or extracted invoice data."""
+    return any(p.search(question) for p in _DOC_QUESTION_PATTERNS)
+
+
+def _count_confirmed_extractions(db: Session) -> int:
+    """Count rows the user has confirmed (confirmed_by_user = 1).
+
+    Returns 0 when ``extracted_documents`` is missing (minimal test DB) so shipment-only
+    queries still run. Other DB errors propagate.
+    """
+    try:
+        result = db.execute(
+            text("SELECT COUNT(*) FROM extracted_documents WHERE confirmed_by_user = 1")
+        )
+        return int(result.scalar() or 0)
+    except OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            return 0
+        raise
+
+
+def _should_answer_without_confirmed_extractions(db: Session, question: str) -> bool:
+    """Analyst-facing 'my data' uses confirmed extractions only — no SQL if none and question needs them."""
+    if _count_confirmed_extractions(db) > 0:
+        return False
+    return _question_targets_extracted_documents(question)
+
+
+def _no_confirmed_extractions_response() -> AnalyticsQueryResponse:
+    """Honest answer when the question needs extracted data but nothing is confirmed yet."""
+    return AnalyticsQueryResponse(
+        answer=(
+            "There are no confirmed uploaded invoices in the database yet. "
+            "Open the Documents tab, upload a freight document, review it, and click Confirm "
+            "to store it for analytics. You can still ask questions about the historical SCMS "
+            "shipments dataset in this chat."
+        ),
+        sql="",
+        columns=[],
+        rows=[],
+        row_count=0,
+        suggested_questions=[
+            "What is the average freight cost by shipment mode?",
+            "Which countries have the most shipments in the dataset?",
+        ],
+    )
+
+
+@router.post(
+    "/query",
+    response_model=AnalyticsQueryResponse,
+    responses={
+        400: {
+            "description": "Generated SQL failed verification (unsafe or disallowed).",
+            "model": ErrorResponse,
+        },
+        422: {
+            "description": "Verified SQL failed to execute against the database.",
+            "model": ErrorResponse,
+        },
+    },
+)
 async def post_query(
     body: AnalyticsQueryRequest,
     db: Session = Depends(get_db),
-) -> AnalyticsQueryResponse:
+) -> AnalyticsQueryResponse | JSONResponse:
     client = ModelClient()
     planner = AnalyticsPlanner(client)
     executor = AnalyticsExecutor(client)
     verifier = AnalyticsVerifier()
 
+    # No confirmed extractions + document-themed question: answer before intent (Story 4.1 deferred).
+    # Avoids misclassified out_of_scope hiding the empty-state message.
+    # If the confirmed-count query fails, defer to the normal pipeline (same as when this lived
+    # inside the main try — see test_db_error_returns_query_failed_not_500).
+    should_empty_state = False
+    try:
+        should_empty_state = _should_answer_without_confirmed_extractions(db, body.question)
+    except Exception:
+        logger.warning(
+            "Confirmed-extraction precheck failed; continuing to intent classification",
+            exc_info=True,
+        )
+
+    if should_empty_state:
+        return _no_confirmed_extractions_response()
+
     # classify_intent has its own try/except so LLM errors here don't become
-    # "unsafe_sql" responses via the outer ValueError handler.
+    # structured SQL error responses.
     try:
         intent = await planner.classify_intent(body.question)
+    except (RateLimitError, ModelUnavailableError):
+        raise
     except Exception:
         logger.warning("classify_intent raised unexpectedly")
         intent = {
@@ -63,7 +210,8 @@ async def post_query(
     if intent_value == "classification_failed":
         return AnalyticsQueryResponse(
             answer=intent.get(
-                "answer", "Unable to classify your question. Please rephrase and try again."
+                "answer",
+                "Unable to classify your question. Please rephrase and try again.",
             ),
             sql="",
             columns=[],
@@ -76,13 +224,62 @@ async def post_query(
     try:
         refined_question = await planner.plan(body.question, body.previous_sql)
         sql = await executor.generate_sql(refined_question, body.previous_sql)
-        safe_sql = verifier.verify(sql)
+        try:
+            safe_sql = verifier.verify(sql)
+        except ValueError:
+            logger.warning("Analytics verifier rejected SQL")
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error=True,
+                    error_type=ERROR_TYPE_UNSAFE_SQL,
+                    message=_MSG_UNSAFE_SQL,
+                    detail={"sql": sql},
+                ).model_dump(),
+            )
 
-        result = db.execute(text(safe_sql))
+        try:
+            result = db.execute(text(safe_sql))
+        except OperationalError as exc:
+            # SQLite uses OperationalError for bad SQL too; reserve 503 for lock/contention only.
+            if "locked" in str(exc).lower():
+                logger.warning("Database locked after SQL verification", exc_info=True)
+                return JSONResponse(
+                    status_code=503,
+                    content=ErrorResponse(
+                        error=True,
+                        error_type=ERROR_TYPE_DATABASE_UNAVAILABLE,
+                        message=_MSG_DATABASE_UNAVAILABLE,
+                        detail={"sql": safe_sql},
+                    ).model_dump(),
+                )
+            logger.warning("SQL execution failed after verification", exc_info=True)
+            return JSONResponse(
+                status_code=422,
+                content=ErrorResponse(
+                    error=True,
+                    error_type=ERROR_TYPE_SQL_EXECUTION,
+                    message=_MSG_SQL_EXECUTION,
+                    detail={"sql": safe_sql},
+                ).model_dump(),
+            )
+        except SQLAlchemyError:
+            logger.warning("SQL execution failed after verification", exc_info=True)
+            return JSONResponse(
+                status_code=422,
+                content=ErrorResponse(
+                    error=True,
+                    error_type=ERROR_TYPE_SQL_EXECUTION,
+                    message=_MSG_SQL_EXECUTION,
+                    detail={"sql": safe_sql},
+                ).model_dump(),
+            )
         columns = list(result.keys())
         all_rows = [list(row) for row in result.fetchall()]
         row_count = len(all_rows)
-        rows = all_rows[:_MAX_RESPONSE_ROWS]  # cap response size; row_count reflects DB total
+        rows = all_rows[
+            :_MAX_RESPONSE_ROWS
+        ]  # cap response size; row_count reflects DB total
 
         null_exclusions = _count_null_exclusions(db, safe_sql)
 
@@ -90,7 +287,9 @@ async def post_query(
             client, body.question, safe_sql, columns, rows, null_exclusions
         )
 
-        chart_config = await _generate_chart_config(client, body.question, columns, rows)
+        chart_config = await _generate_chart_config(
+            client, body.question, columns, rows
+        )
 
         suggested_questions = await _generate_follow_ups(
             client, body.question, answer, columns
@@ -106,17 +305,8 @@ async def post_query(
             suggested_questions=suggested_questions,
         )
 
-    except ValueError as e:
-        logger.warning("Analytics verifier rejected SQL", extra={"error": str(e)})
-        return AnalyticsQueryResponse(
-            answer="",
-            sql="",
-            columns=[],
-            rows=[],
-            row_count=0,
-            error="unsafe_sql",
-            message=str(e),
-        )
+    except (RateLimitError, ModelUnavailableError):
+        raise
     except Exception as e:
         logger.exception("Analytics query failed")
         return AnalyticsQueryResponse(
@@ -134,7 +324,8 @@ def _count_null_exclusions(db: Session, sql: str) -> dict[str, int]:
     """Count rows excluded by IS NOT NULL filters in the given SQL.
 
     Returns {column_name: excluded_count} for columns with excluded_count > 0.
-    Only queries the shipments table. Strips SQL comments first to avoid false positives.
+    Only queries the **shipments** table — not extracted_documents (ambiguous shared column
+    names; cross-table queries may omit extracted NULL stats). Strips SQL comments first.
     Column names are double-quoted to prevent keyword conflicts.
     """
     sql_no_comments = _SQL_BLOCK_COMMENT_RE.sub("", _SQL_LINE_COMMENT_RE.sub("", sql))
@@ -168,12 +359,20 @@ async def _generate_answer(
         if null_exclusions
         else "none"
     )
+    linkage_note = ""
+    if _sql_crosses_shipments_and_extracted(sql):
+        linkage_note = (
+            "\nLinkage note: NULL exclusion counts (if any) are for **shipments** columns only. "
+            "Explain how the result combines or compares the historical SCMS **shipments** "
+            "dataset with the user's **confirmed** rows in **extracted_documents**."
+        )
     context = (
         f"Question: {question}\n"
         f"SQL: {sql}\n"
         f"Columns: {columns}\n"
         f"Rows (first {len(preview_rows)} of {len(rows)}): {preview_rows}\n"
         f"NULL exclusions: {null_info}"
+        f"{linkage_note}"
     )
     messages = [
         {"role": "system", "content": load_prompt("analytics_answer")},
@@ -195,15 +394,24 @@ async def _generate_follow_ups(
         {"role": "system", "content": load_prompt("analytics_followup")},
         {"role": "user", "content": context},
     ]
-    raw = await client.call(
-        model=settings.analytics_model, messages=messages, temperature=0.7
-    )
+
+    def _must_be_followup_list(s: str) -> None:
+        data = json.loads(s.strip())
+        if not isinstance(data, list):
+            raise ValueError("follow-up response must be a JSON array")
+
     try:
+        raw = await client.call(
+            model=settings.analytics_model,
+            messages=messages,
+            temperature=0.7,
+            validate=_must_be_followup_list,
+        )
         suggestions = json.loads(raw.strip())
         if isinstance(suggestions, list):
             return [str(s) for s in suggestions[:3] if s is not None and str(s).strip()]
-    except (json.JSONDecodeError, ValueError):
-        logger.warning("_generate_follow_ups JSON parse failed: %s", raw[:100])
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning("_generate_follow_ups JSON parse failed after retries: %s", e)
     return []
 
 
@@ -230,10 +438,18 @@ async def _generate_chart_config(
         {"role": "system", "content": load_prompt("analytics_chart")},
         {"role": "user", "content": context},
     ]
+
+    def _must_be_chart_json(s: str) -> None:
+        cleaned = re.sub(r"^```[a-z]*\n?|\n?```$", "", s.strip(), flags=re.MULTILINE)
+        json.loads(cleaned.strip())
+
     raw = ""
     try:
         raw = await client.call(
-            model=settings.analytics_model, messages=messages, temperature=0.0
+            model=settings.analytics_model,
+            messages=messages,
+            temperature=0.0,
+            validate=_must_be_chart_json,
         )
         cleaned = re.sub(r"^```[a-z]*\n?|\n?```$", "", raw.strip(), flags=re.MULTILINE)
         result = json.loads(cleaned.strip())

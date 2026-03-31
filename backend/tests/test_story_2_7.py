@@ -29,13 +29,15 @@ from app.core.database import get_db
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+_BACKEND_ROOT = pathlib.Path(__file__).parent.parent
+
 _ANALYTICS_MODULE_PATHS = [
-    pathlib.Path("app/agents/analytics/__init__.py"),
-    pathlib.Path("app/agents/analytics/planner.py"),
-    pathlib.Path("app/agents/analytics/executor.py"),
-    pathlib.Path("app/agents/analytics/verifier.py"),
-    pathlib.Path("app/api/routes/analytics.py"),
-    pathlib.Path("app/schemas/analytics.py"),
+    _BACKEND_ROOT / "app/agents/analytics/__init__.py",
+    _BACKEND_ROOT / "app/agents/analytics/planner.py",
+    _BACKEND_ROOT / "app/agents/analytics/executor.py",
+    _BACKEND_ROOT / "app/agents/analytics/verifier.py",
+    _BACKEND_ROOT / "app/api/routes/analytics.py",
+    _BACKEND_ROOT / "app/schemas/analytics.py",
 ]
 
 _EXTRACTION_MARKERS = ("extraction", "extracted", "extract")

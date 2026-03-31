@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
+from app.core.config import settings
 from app.services.cache import get_cached_response, make_cache_key, write_cached_response
 from app.services.model_client import ModelClient
 
@@ -161,6 +162,10 @@ class TestModelClientCacheMiss:
 
         assert result == "live-answer"
         mock_api.chat.completions.create.assert_called_once()
+        assert (
+            mock_api.chat.completions.create.call_args.kwargs.get("max_tokens")
+            == settings.llm_max_tokens
+        )
 
     @pytest.mark.asyncio
     async def test_cache_miss_writes_to_cache(self, tmp_path):
