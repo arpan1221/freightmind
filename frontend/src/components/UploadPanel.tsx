@@ -8,6 +8,11 @@ import { useExtraction } from "@/hooks/useExtraction";
 const ACCEPTED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const ACCEPTED_EXTENSIONS = ".pdf, .png, .jpg, .jpeg";
 
+interface UploadPanelProps {
+  /** Invoked after vision extraction persists a document and line items (e.g. refresh schema counts). */
+  onExtractSuccess?: () => void;
+}
+
 const FIELD_LABELS: Record<string, string> = {
   invoice_number: "Invoice Number",
   invoice_date: "Invoice Date",
@@ -24,7 +29,7 @@ const FIELD_LABELS: Record<string, string> = {
   delivery_date: "Delivery Date",
 };
 
-export default function UploadPanel() {
+export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     isExtracting,
@@ -43,7 +48,7 @@ export default function UploadPanel() {
     onRateLimitComplete,
     extractDisabled,
     confirmDisabled,
-  } = useExtraction();
+  } = useExtraction({ onExtractSuccess });
 
   const toastEl =
     errorToast != null ? (

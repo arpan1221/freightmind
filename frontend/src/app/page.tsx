@@ -24,8 +24,11 @@ export default function Home() {
     retryAfterSeconds: number | null;
   } | null>(null);
 
-  const loadSchema = useCallback(() => {
-    setIsLoadingSchema(true);
+  const loadSchema = useCallback((options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setIsLoadingSchema(true);
+    }
     api
       .get<SchemaInfoResponse>("/api/schema")
       .then((res) => {
@@ -50,7 +53,11 @@ export default function Home() {
           });
         }
       })
-      .finally(() => setIsLoadingSchema(false));
+      .finally(() => {
+        if (!silent) {
+          setIsLoadingSchema(false);
+        }
+      });
   }, []);
 
   useEffect(() => {
@@ -116,7 +123,13 @@ export default function Home() {
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
-        {activeTab === "analytics" ? <ChatPanel /> : <UploadPanel />}
+        {activeTab === "analytics" ? (
+          <ChatPanel />
+        ) : (
+          <UploadPanel
+            onExtractSuccess={() => loadSchema({ silent: true })}
+          />
+        )}
       </div>
     </main>
   );

@@ -50,6 +50,61 @@ This matches the **service boundaries** described in `_bmad-output/planning-arti
 | Documents | PyMuPDF (PDF → images for vision) |
 | Local orchestration | Docker Compose at repo root |
 
+## Data store schema
+
+Three SQLite tables. Full column-mapping notes and linkage query examples are in [`DATASET_SCHEMA.md`](DATASET_SCHEMA.md).
+
+**`shipments`** — seeded from `backend/data/SCMS_Delivery_History_Dataset.csv` on first start (10,324 rows, 2006–2015).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `country` | TEXT | destination country |
+| `shipment_mode` | TEXT | `Air` · `Air Charter` · `Ocean` · `Truck` |
+| `vendor` | TEXT | |
+| `weight_kg` | REAL | nullable (~14 % of rows) |
+| `freight_cost_usd` | REAL | nullable |
+| `line_item_insurance_usd` | REAL | nullable |
+| `scheduled_delivery_date` | TEXT | ISO date string |
+| *(+ 25 further columns)* | | see `DATASET_SCHEMA.md` |
+
+**`extracted_documents`** — one row per confirmed invoice upload.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | INTEGER PK | |
+| `source_filename` | TEXT | original upload name |
+| `invoice_number` … `delivery_date` | TEXT / REAL | 13 extracted header fields |
+| `extraction_confidence` | REAL | mean per-field confidence score |
+| `confirmed_by_user` | INTEGER | `0` = pending · `1` = confirmed |
+
+**`extracted_line_items`** — child rows, FK → `extracted_documents.id`.
+
+| Column | Type |
+|--------|------|
+| `document_id` | INTEGER FK |
+| `description` | TEXT |
+| `quantity` · `unit_price` · `total_price` | REAL |
+
+Analytics queries can JOIN or UNION all three tables; the LLM is given the full schema in its system prompt.
+
+---
+
+## Known limitations
+
+| Area | Limitation |
+|------|-----------|
+| **PDF extraction — page 1 only** | The vision pipeline sends only the first page of a multi-page PDF (`extraction/planner.py:27`). Charges on page 2 of a two-page invoice will not be extracted. |
+| **Extraction accuracy is model-dependent** | Confidence scoring is heuristic: the vision model assigns HIGH / MEDIUM / LOW / NOT_FOUND per field. Results are non-deterministic — the same document may yield different confidence levels across runs or model versions. |
+| **Chart generation is best-effort** | The analytics agent asks the LLM to produce a `ChartConfig`; it returns `null` when the result set doesn't lend itself to a chart (single-row answers, non-numeric columns). No chart is shown in those cases. |
+| **Cross-table linkage vocabulary** | Linkage queries work best when extracted `shipment_mode` and `destination_country` values normalise to SCMS vocabulary (`Air`, `Ocean`, `Truck`, `Air Charter`). Free-text like "air freight" may not match. |
+| **Dataset date range** | SCMS data covers 2006–2015. Queries phrased as "this year" or "recently" may confuse the LLM planner; the system will say so if it detects an out-of-scope question. |
+| **SQLite concurrency** | Single-writer SQLite is sufficient for PoC / demo use. It is not suitable for concurrent multi-user write workloads without a migration to Postgres or similar. |
+| **Response cache** | `ModelClient` caches LLM responses by SHA-256 of (model, messages). Set `BYPASS_CACHE=true` in `.env` to disable. Stale cache entries can appear if prompts change without clearing `backend/.cache/`. |
+| **Rate limits** | OpenRouter 429s surface as an `ErrorToast` with a countdown. Retry timing is provider-dependent and may not be accurate. |
+
+---
+
 ## Prerequisites
 
 - **Docker** with Compose v2 (`docker compose`) or legacy `docker-compose`
@@ -118,7 +173,13 @@ Do not commit API keys or team-specific URLs into the repo.
 
 Step-by-step deploy narratives (environment variables, health checks, Vercel project settings) live in the story artifacts: [`6-2-backend-deployment-to-render.md`](_bmad-output/implementation-artifacts/6-2-backend-deployment-to-render.md) and [`6-3-frontend-deployment-to-vercel.md`](_bmad-output/implementation-artifacts/6-3-frontend-deployment-to-vercel.md).
 
-## Demo script (five evaluation journeys)
+## Demo script
+
+> **Submission deliverable (1–2 min):** see **[DEMO_SCRIPT.md](DEMO_SCRIPT.md)** — exact text to type, expected outputs, and timing for analytics → extraction → linkage in under 90 seconds.
+
+The extended five-journey walkthrough below is for evaluators exploring the full surface area of the app.
+
+## Extended evaluation journeys
 
 Perform these in order in the UI at `http://localhost:3000` (layout is defined in `frontend/src/app/page.tsx`: dataset card, **ChatPanel**, **UploadPanel**).
 

@@ -37,6 +37,11 @@ export default function ChatPanel() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isQuerying]);
 
+  const showQuerySpinner =
+    isQuerying &&
+    messages.length > 0 &&
+    messages[messages.length - 1]?.role === "user";
+
   function handleSubmit() {
     const question = inputValue.trim();
     if (!question || inputDisabled) return;
@@ -190,7 +195,7 @@ export default function ChatPanel() {
           );
         })}
 
-        {isQuerying && (
+        {showQuerySpinner && (
           <div className="flex justify-start" role="status" aria-label="Loading response">
             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
               <div className="flex gap-1 items-center" aria-hidden="true">

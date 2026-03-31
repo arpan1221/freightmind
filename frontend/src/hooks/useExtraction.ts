@@ -9,6 +9,11 @@ import {
 } from "@/lib/errorResponse";
 import type { ConfirmResponse, ExtractionResponse } from "@/types/api";
 
+export interface UseExtractionOptions {
+  /** Called after vision extraction succeeds and rows are persisted (refresh dataset counts). */
+  onExtractSuccess?: () => void;
+}
+
 interface ExtractionToastState {
   message: string;
   retryAfterSeconds: number | null;
@@ -34,7 +39,8 @@ const INITIAL_STATE: ExtractionState = {
   rateLimited: false,
 };
 
-export function useExtraction() {
+export function useExtraction(options: UseExtractionOptions = {}) {
+  const { onExtractSuccess } = options;
   const [state, setState] = useState<ExtractionState>(INITIAL_STATE);
 
   function update(patch: Partial<ExtractionState>) {
@@ -71,6 +77,7 @@ export function useExtraction() {
         });
       } else {
         update({ extraction: res.data });
+        onExtractSuccess?.();
       }
     } catch (e: unknown) {
       const structured = getErrorResponseFromUnknown(e);
