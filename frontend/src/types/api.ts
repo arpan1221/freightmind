@@ -41,14 +41,17 @@ export interface ExtractedLineItem {
 }
 
 export interface ExtractionResponse {
-  extraction_id: string;
+  extraction_id: number;
+  filename: string;
   fields: Record<string, ExtractedField>;
   line_items: ExtractedLineItem[];
+  low_confidence_fields: string[];
   error: string | null;
+  message: string | null;
 }
 
 export interface ConfirmRequest {
-  extraction_id: string;
+  extraction_id: number;
   corrections?: Record<string, string>;
 }
 
@@ -76,8 +79,11 @@ export interface SchemaInfoResponse {
 
 // Common
 
+/** Matches backend `ErrorResponse`; analytics may set `detail.sql` for rejected/failed SQL (Story 5.4). */
 export interface ErrorResponse {
-  error: string | null;
-  message: string | null;
-  retry_after: number | null;
+  error: boolean;
+  error_type: string;
+  message: string;
+  detail?: Record<string, unknown> | null;
+  retry_after?: number | null;
 }
