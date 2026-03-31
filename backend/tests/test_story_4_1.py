@@ -171,7 +171,7 @@ class TestNoConfirmedExtractionsHonestAnswer:
             )
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "How many invoices have I uploaded?"},
@@ -205,7 +205,7 @@ class TestNoConfirmedExtractionsHonestAnswer:
             ]
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "How many shipments are in the dataset?"},
@@ -245,7 +245,7 @@ class TestConfirmedExtractionSqlPath:
             ]
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "How many invoices have I uploaded?"},

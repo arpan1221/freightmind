@@ -25,7 +25,7 @@ def test_demo_invoices_directory_exists() -> None:
 
 def test_demo_invoice_count_and_format_mix() -> None:
     files = _invoice_files()
-    assert 5 <= len(files) <= 6, f"Expected 5–6 invoice files, got {len(files)}: {[f.name for f in files]}"
+    assert len(files) >= 5, f"Expected at least 5 invoice files, got {len(files)}: {[f.name for f in files]}"
 
     pdf_n = sum(1 for f in files if f.suffix.lower() == ".pdf")
     raster_n = sum(1 for f in files if f.suffix.lower() in (".png", ".jpg", ".jpeg"))

@@ -1,9 +1,11 @@
 import json
 import logging
 import re
+from dataclasses import dataclass
+from typing import Any
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -46,6 +48,19 @@ _MSG_DATABASE_UNAVAILABLE = (
 _NULL_COL_RE = re.compile(r"(\w+)\s+IS\s+NOT\s+NULL", re.IGNORECASE)
 _SQL_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class _RowsBundle:
+    """Successful SQL phase: ready for answer generation (streaming or not)."""
+
+    client: ModelClient
+    question: str
+    safe_sql: str
+    columns: list[str]
+    rows: list[list]
+    row_count: int
+    null_exclusions: dict[str, int]
 
 
 def _sql_crosses_shipments_and_extracted(sql: str) -> bool:
@@ -141,25 +156,17 @@ def _no_confirmed_extractions_response() -> AnalyticsQueryResponse:
     )
 
 
-@router.post(
-    "/query",
-    response_model=AnalyticsQueryResponse,
-    responses={
-        400: {
-            "description": "Generated SQL failed verification (unsafe or disallowed).",
-            "model": ErrorResponse,
-        },
-        422: {
-            "description": "Verified SQL failed to execute against the database.",
-            "model": ErrorResponse,
-        },
-    },
-)
-async def post_query(
+def _sse_event(event: str, payload: dict[str, Any]) -> bytes:
+    """Format one Server-Sent Event frame (event + JSON data line)."""
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n".encode("utf-8")
+
+
+async def _run_pipeline_to_rows(
     body: AnalyticsQueryRequest,
-    db: Session = Depends(get_db),
-) -> AnalyticsQueryResponse | JSONResponse:
-    client = ModelClient()
+    db: Session,
+) -> AnalyticsQueryResponse | JSONResponse | _RowsBundle:
+    """Shared Planner → Executor → Verifier → DB path; returns rows or an early/error response."""
+    client = ModelClient.for_analytics()
     planner = AnalyticsPlanner(client)
     executor = AnalyticsExecutor(client)
     verifier = AnalyticsVerifier()
@@ -283,24 +290,75 @@ async def post_query(
 
         null_exclusions = _count_null_exclusions(db, safe_sql)
 
+        return _RowsBundle(
+            client=client,
+            question=body.question,
+            safe_sql=safe_sql,
+            columns=columns,
+            rows=rows,
+            row_count=row_count,
+            null_exclusions=null_exclusions,
+        )
+
+    except (RateLimitError, ModelUnavailableError):
+        raise
+    except Exception as e:
+        logger.exception("Analytics query failed")
+        return AnalyticsQueryResponse(
+            answer="",
+            sql="",
+            columns=[],
+            rows=[],
+            row_count=0,
+            error="query_failed",
+            message=str(e),
+        )
+
+
+@router.post(
+    "/query",
+    response_model=AnalyticsQueryResponse,
+    responses={
+        400: {
+            "description": "Generated SQL failed verification (unsafe or disallowed).",
+            "model": ErrorResponse,
+        },
+        422: {
+            "description": "Verified SQL failed to execute against the database.",
+            "model": ErrorResponse,
+        },
+    },
+)
+async def post_query(
+    body: AnalyticsQueryRequest,
+    db: Session = Depends(get_db),
+) -> AnalyticsQueryResponse | JSONResponse:
+    phase = await _run_pipeline_to_rows(body, db)
+    if isinstance(phase, JSONResponse):
+        return phase
+    if isinstance(phase, AnalyticsQueryResponse):
+        return phase
+
+    rb = phase
+    try:
         answer = await _generate_answer(
-            client, body.question, safe_sql, columns, rows, null_exclusions
+            rb.client, rb.question, rb.safe_sql, rb.columns, rb.rows, rb.null_exclusions
         )
 
         chart_config = await _generate_chart_config(
-            client, body.question, columns, rows
+            rb.client, rb.question, rb.columns, rb.rows
         )
 
         suggested_questions = await _generate_follow_ups(
-            client, body.question, answer, columns
+            rb.client, rb.question, answer, rb.columns
         )
 
         return AnalyticsQueryResponse(
             answer=answer,
-            sql=safe_sql,
-            columns=columns,
-            rows=rows,
-            row_count=row_count,
+            sql=rb.safe_sql,
+            columns=rb.columns,
+            rows=rb.rows,
+            row_count=rb.row_count,
             chart_config=chart_config,
             suggested_questions=suggested_questions,
         )
@@ -318,6 +376,128 @@ async def post_query(
             error="query_failed",
             message=str(e),
         )
+
+
+_STREAM_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+@router.post(
+    "/query/stream",
+    response_model=None,
+    responses={
+        400: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        200: {
+            "description": "Server-Sent Events: metadata → delta → complete (or single complete for early exits).",
+            "content": {
+                "text/event-stream": {},
+            },
+        },
+    },
+)
+async def post_query_stream(
+    body: AnalyticsQueryRequest,
+    db: Session = Depends(get_db),
+) -> StreamingResponse | JSONResponse:
+    """Same pipeline as ``POST /api/query``, but streams the natural-language answer as SSE.
+
+    Events:
+    - ``metadata``: ``sql``, ``columns``, ``rows``, ``row_count`` (result ready; answer still streaming).
+    - ``delta``: ``t`` — incremental answer text.
+    - ``complete``: full :class:`AnalyticsQueryResponse` body (includes chart and follow-ups).
+    - ``error``: structured failure during or after streaming (rare).
+
+    Early exits (out of scope, empty state, etc.) emit a single ``complete`` event.
+    """
+    phase = await _run_pipeline_to_rows(body, db)
+    if isinstance(phase, JSONResponse):
+        return phase
+
+    if isinstance(phase, AnalyticsQueryResponse):
+
+        async def early_only() -> Any:
+            yield _sse_event("complete", phase.model_dump())
+
+        return StreamingResponse(
+            early_only(),
+            media_type="text/event-stream",
+            headers=_STREAM_HEADERS,
+        )
+
+    rb = phase
+
+    async def gen() -> Any:
+        yield _sse_event(
+            "metadata",
+            {
+                "sql": rb.safe_sql,
+                "columns": rb.columns,
+                "rows": rb.rows,
+                "row_count": rb.row_count,
+            },
+        )
+        messages = _answer_messages(
+            rb.question,
+            rb.safe_sql,
+            rb.columns,
+            rb.rows,
+            rb.null_exclusions,
+        )
+        parts: list[str] = []
+        try:
+            async for delta in rb.client.stream_call(
+                model=settings.analytics_model,
+                messages=messages,
+                temperature=0.0,
+            ):
+                parts.append(delta)
+                yield _sse_event("delta", {"t": delta})
+        except (RateLimitError, ModelUnavailableError):
+            raise
+        except Exception as e:
+            logger.exception("Analytics stream failed")
+            yield _sse_event(
+                "error",
+                {"error": "query_failed", "message": str(e)},
+            )
+            return
+
+        answer = "".join(parts)
+        try:
+            chart_config = await _generate_chart_config(
+                rb.client, rb.question, rb.columns, rb.rows
+            )
+            suggested_questions = await _generate_follow_ups(
+                rb.client, rb.question, answer, rb.columns
+            )
+        except Exception as e:
+            logger.exception("Analytics post-stream enrichment failed")
+            yield _sse_event(
+                "error",
+                {"error": "query_failed", "message": str(e)},
+            )
+            return
+
+        resp = AnalyticsQueryResponse(
+            answer=answer,
+            sql=rb.safe_sql,
+            columns=rb.columns,
+            rows=rb.rows,
+            row_count=rb.row_count,
+            chart_config=chart_config,
+            suggested_questions=suggested_questions,
+        )
+        yield _sse_event("complete", resp.model_dump())
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers=_STREAM_HEADERS,
+    )
 
 
 def _count_null_exclusions(db: Session, sql: str) -> dict[str, int]:
@@ -345,14 +525,14 @@ def _count_null_exclusions(db: Session, sql: str) -> dict[str, int]:
     return counts
 
 
-async def _generate_answer(
-    client: ModelClient,
+def _answer_messages(
     question: str,
     sql: str,
     columns: list[str],
     rows: list[list],
     null_exclusions: dict[str, int],
-) -> str:
+) -> list[dict[str, str]]:
+    """Chat messages for the analytics natural-language answer (shared by sync and stream)."""
     preview_rows = rows[:_MAX_ROWS_IN_ANSWER_CONTEXT]
     null_info = (
         ", ".join(f"{n} records with NULL {col}" for col, n in null_exclusions.items())
@@ -374,10 +554,21 @@ async def _generate_answer(
         f"NULL exclusions: {null_info}"
         f"{linkage_note}"
     )
-    messages = [
+    return [
         {"role": "system", "content": load_prompt("analytics_answer")},
         {"role": "user", "content": context},
     ]
+
+
+async def _generate_answer(
+    client: ModelClient,
+    question: str,
+    sql: str,
+    columns: list[str],
+    rows: list[list],
+    null_exclusions: dict[str, int],
+) -> str:
+    messages = _answer_messages(question, sql, columns, rows, null_exclusions)
     return await client.call(
         model=settings.analytics_model, messages=messages, temperature=0.0
     )

@@ -234,6 +234,14 @@ _(Schema refetch on countdown: implemented — see “Addressed in code” above
 - No `onDragLeave` handler — no visual drag-enter/leave state toggle; UX polish out of scope for this story.
 - Error state hides placeholder — `!error && <placeholder>` removes bottom placeholder card when error shown, leaving empty space; minor layout polish.
 
+## Deferred from: code review of spec-multi-provider-inference-ollama-openrouter (2026-03-31)
+
+- `RateLimitError` no longer propagated from primary — callers that previously caught `RateLimitError` for custom backoff now see `ModelUnavailableError` instead; document this contract change in TECH_DECISIONS if a new caller relies on it.
+- Cross-provider fallback not enforced — `_fallback_for()` returns fallback model id without enforcing same provider; misconfigured env (Ollama primary, OpenRouter fallback) will silently send the wrong base_url for the fallback call.
+- `ollama_base_url` default (`host.docker.internal`) does not resolve on Linux Docker without `--add-host`; Linux users must set `OLLAMA_BASE_URL=http://172.17.0.1:11434/v1` or equivalent.
+- Analytics `ModelClient` uses 5s default timeout; no dedicated `analytics_timeout` setting — add `ANALYTICS_TIMEOUT` env var if slow Ollama models need a longer window.
+- `test_story_6_4.py` upper bound guard removed (`<= 6`); test no longer catches runaway demo file accumulation.
+
 ## Deferred from: code review of 4-1-schema-aware-planner-both-tables-in-analytics-prompt-context (2026-03-30)
 
 - Regex heuristics for document-themed questions may miss rare paraphrases — user may get an empty result set from generated SQL instead of the no-confirmed short-circuit; expand patterns if product/support feedback warrants it.

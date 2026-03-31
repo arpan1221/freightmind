@@ -57,7 +57,7 @@ async def post_extract(
     try:
         image_bytes, mime_type = ExtractionPlanner.prepare(file_bytes, file.content_type)
 
-        client = ModelClient(timeout=settings.vision_timeout)
+        client = ModelClient.for_vision(timeout=settings.vision_timeout)
         executor = ExtractionExecutor(client)
         raw = await executor.extract(image_bytes, mime_type)
 

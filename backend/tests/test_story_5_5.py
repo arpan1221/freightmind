@@ -137,23 +137,49 @@ async def test_both_primary_and_fallback_fail_model_unavailable(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_429_on_primary_no_fallback(tmp_path):
-    """Rate limit must not trigger fallback (Story 5.5 / 5.3)."""
+async def test_429_on_primary_triggers_fallback(tmp_path):
+    """Rate limit on primary now falls through to fallback (changed from Story 5.3 original)."""
     req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
-    response = httpx.Response(429, request=req, headers={"retry-after": "60"})
-    api_err = APIStatusError("rate limited", response=response, body=None)
+    rate_limit_resp = httpx.Response(429, request=req, headers={"retry-after": "60"})
+    rate_limit_err = APIStatusError("rate limited", response=rate_limit_resp, body=None)
+
+    calls: list[str] = []
+
+    async def create(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == PRIMARY_TEXT:
+            raise rate_limit_err
+        return _make_mock_completion("fallback-ok")
 
     with _patch_settings(tmp_path):
         with patch("app.services.model_client.openai.AsyncOpenAI") as mock_cls:
             mock_api = AsyncMock()
             mock_cls.return_value = mock_api
-            mock_api.chat.completions.create = AsyncMock(side_effect=api_err)
+            mock_api.chat.completions.create = AsyncMock(side_effect=create)
 
             mc = ModelClient(cache_dir=str(tmp_path))
-            with pytest.raises(RateLimitError):
-                await mc.call(PRIMARY_TEXT, [{"role": "user", "content": "hi"}], 0.0)
+            out = await mc.call(PRIMARY_TEXT, [{"role": "user", "content": "hi"}], 0.0)
 
-    assert mock_api.chat.completions.create.call_count == 1
+    assert out == "fallback-ok"
+    assert calls == [PRIMARY_TEXT, FALLBACK_TEXT]
+
+
+@pytest.mark.asyncio
+async def test_429_on_both_primary_and_fallback_raises_unavailable(tmp_path):
+    """Rate limit on both primary and fallback → ModelUnavailableError."""
+    req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    rate_limit_resp = httpx.Response(429, request=req, headers={"retry-after": "60"})
+    rate_limit_err = APIStatusError("rate limited", response=rate_limit_resp, body=None)
+
+    with _patch_settings(tmp_path):
+        with patch("app.services.model_client.openai.AsyncOpenAI") as mock_cls:
+            mock_api = AsyncMock()
+            mock_cls.return_value = mock_api
+            mock_api.chat.completions.create = AsyncMock(side_effect=rate_limit_err)
+
+            mc = ModelClient(cache_dir=str(tmp_path))
+            with pytest.raises(ModelUnavailableError):
+                await mc.call(PRIMARY_TEXT, [{"role": "user", "content": "hi"}], 0.0)
 
 
 @pytest.mark.asyncio

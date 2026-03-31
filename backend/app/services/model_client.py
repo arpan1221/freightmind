@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Any, NoReturn
 
 import httpx
@@ -44,12 +44,42 @@ class ModelClient:
     never trigger fallback.
     """
 
-    def __init__(self, cache_dir: str | None = None, timeout: float = 5.0) -> None:
+    _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+    def __init__(
+        self,
+        base_url: str = "https://openrouter.ai/api/v1",
+        api_key: str = "",
+        cache_dir: str | None = None,
+        timeout: float = 5.0,
+    ) -> None:
         self._cache_dir = cache_dir or settings.cache_dir
         self._client = openai.AsyncOpenAI(
-            api_key=settings.openrouter_api_key,
-            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+            base_url=base_url,
             http_client=httpx.AsyncClient(timeout=httpx.Timeout(timeout)),
+        )
+
+    @classmethod
+    def for_analytics(cls, timeout: float = 5.0) -> "ModelClient":
+        """Return a ModelClient wired to the configured analytics provider."""
+        if settings.analytics_provider == "ollama":
+            return cls(base_url=settings.ollama_base_url, api_key="ollama", timeout=timeout)
+        return cls(
+            base_url=cls._OPENROUTER_BASE_URL,
+            api_key=settings.openrouter_api_key or "",  # validator ensures non-None at startup
+            timeout=timeout,
+        )
+
+    @classmethod
+    def for_vision(cls, timeout: float = 5.0) -> "ModelClient":
+        """Return a ModelClient wired to the configured vision provider."""
+        if settings.vision_provider == "ollama":
+            return cls(base_url=settings.ollama_base_url, api_key="ollama", timeout=timeout)
+        return cls(
+            base_url=cls._OPENROUTER_BASE_URL,
+            api_key=settings.openrouter_api_key or "",  # validator ensures non-None at startup
+            timeout=timeout,
         )
 
     async def call(
@@ -85,8 +115,6 @@ class ModelClient:
             return await self._call_with_validation(
                 model, messages, temperature, validate, is_fallback=False
             )
-        except RateLimitError:
-            raise
         except Exception as primary_exc:
             if fb is None:
                 raise primary_exc
@@ -98,12 +126,94 @@ class ModelClient:
                 return await self._call_with_validation(
                     fb, messages, temperature, validate, is_fallback=True
                 )
-            except RateLimitError:
-                raise
             except Exception:
                 raise ModelUnavailableError(
                     "The language model is temporarily unavailable. Please try again."
                 ) from primary_exc
+
+    async def stream_call(
+        self,
+        model: str,
+        messages: list[dict],
+        temperature: float = 0.0,
+    ) -> AsyncIterator[str]:
+        """Stream assistant text deltas from the chat completion API.
+
+        Does not read or write the response cache (streaming responses are not cached).
+
+        On primary model failure (including rate limits), retries once with the configured
+        fallback model (same as :meth:`call`).
+
+        Yields:
+            Incremental text fragments from the model's delta content.
+        """
+        fb = self._fallback_for(model)
+        try:
+            async for chunk in self._stream_completion(
+                model, messages, temperature, is_fallback=False
+            ):
+                yield chunk
+        except Exception as primary_exc:
+            if fb is None:
+                raise primary_exc
+            try:
+                async for chunk in self._stream_completion(
+                    fb, messages, temperature, is_fallback=True
+                ):
+                    yield chunk
+            except Exception:
+                raise ModelUnavailableError(
+                    "The language model is temporarily unavailable. Please try again."
+                ) from primary_exc
+        return
+
+    async def _stream_completion(
+        self,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+        *,
+        is_fallback: bool,
+    ) -> AsyncIterator[str]:
+        """Single streaming completion; logs one API line (not per token)."""
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True,
+        }
+        kwargs.setdefault("max_tokens", settings.llm_max_tokens)
+        logged = False
+        try:
+            stream = await self._client.chat.completions.create(**kwargs)
+        except Exception as e:
+            self._map_and_raise_sdk_error(e)
+
+        try:
+            async for chunk in stream:
+                if not logged:
+                    logger.info(
+                        "ModelClient streaming API call",
+                        extra={
+                            "cache_hit": False,
+                            "model_name": model,
+                            "retry_count": 0,
+                            "fallback": is_fallback,
+                        },
+                    )
+                    logged = True
+                choices = getattr(chunk, "choices", None)
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                if delta is None:
+                    continue
+                content = getattr(delta, "content", None)
+                if content:
+                    yield content
+        except Exception as e:
+            self._map_and_raise_sdk_error(e)
+        return
 
     @staticmethod
     def _fallback_for(model: str) -> str | None:

@@ -1,5 +1,5 @@
 import logging
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,26 +10,46 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     """Application settings loaded from environment (see ``backend/.env.example``)."""
 
-    openrouter_api_key: str
+    # Required when any provider is "openrouter"; optional when all providers are "ollama".
+    openrouter_api_key: str | None = None
     bypass_cache: bool = False
     database_url: str = "sqlite:///./freightmind.db"
     cache_dir: str = "./cache"
-    analytics_model: str = "meta-llama/llama-3.3-70b-instruct"
+    # Inference provider per agent: "openrouter" | "ollama"
+    analytics_provider: Literal["openrouter", "ollama"] = "ollama"
+    vision_provider: Literal["openrouter", "ollama"] = "openrouter"
+    # Ollama base URL — use host.docker.internal when calling from inside a Docker container.
+    ollama_base_url: str = "http://host.docker.internal:11434/v1"
+    analytics_model: str = "llama3.2:3b"
     # Fallback when primary text model fails after retries (Story 5.5, TECH_DECISIONS TD-2).
-    analytics_model_fallback: str = "deepseek/deepseek-r1-0528:free"
-    vision_model: str = "qwen/qwen2.5-vl-72b-instruct"
+    analytics_model_fallback: str = "llama3.2:3b"
+    vision_model: str = "nvidia/nemotron-nano-12b-v2-vl:free"
     # Fallback when primary vision model fails after retries (Story 5.5, TECH_DECISIONS TD-3).
-    vision_model_fallback: str = "nvidia/nemotron-nano-2-vl:free"
-    vision_timeout: float = 60.0
+    vision_model_fallback: str = "qwen/qwen2.5-vl-7b-instruct:free"
+    vision_timeout: float = 30.0
     # Passed to OpenRouter as max_tokens on every chat completion. High defaults (e.g. model
     # max) can trigger 402 on low-credit accounts; keep this within typical output needs.
-    llm_max_tokens: int = 8192
+    llm_max_tokens: int = 2048
     # Comma-separated origins, or "*" for all (local dev). Production: list explicit UI origins.
     cors_origins: str = "*"
     # Maximum upload size for POST /api/documents/extract (bytes).
     max_upload_bytes: int = 10 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+
+    @model_validator(mode="after")
+    def require_openrouter_key_when_needed(self) -> Self:
+        """Raise at startup if OpenRouter is selected but no API key is provided."""
+        needs_key = (
+            self.analytics_provider == "openrouter"
+            or self.vision_provider == "openrouter"
+        )
+        if needs_key and not self.openrouter_api_key:
+            raise ValueError(
+                "OPENROUTER_API_KEY is required when ANALYTICS_PROVIDER or "
+                "VISION_PROVIDER is set to 'openrouter'."
+            )
+        return self
 
     @model_validator(mode="after")
     def warn_duplicate_fallback_models(self) -> Self:

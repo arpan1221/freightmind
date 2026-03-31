@@ -121,7 +121,7 @@ class TestCrossTableSqlExecution:
             ]
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": user_question})
 
         assert response.status_code == 200

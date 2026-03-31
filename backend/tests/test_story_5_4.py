@@ -87,7 +87,7 @@ class TestStory54StructuredSqlErrors:
                 rejected_sql,
             ]
         )
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "nuke data"})
 
         assert response.status_code == 400
@@ -112,7 +112,7 @@ class TestStory54StructuredSqlErrors:
                 bad_sql,
             ]
         )
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "show mystery column"})
 
         assert response.status_code == 422

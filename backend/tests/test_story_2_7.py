@@ -112,7 +112,7 @@ class TestAnalyticsStandaloneApp:
         client = TestClient(app)
 
         mock_client = _make_mock_client()
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "how many?"})
 
         assert response.status_code == 200
@@ -123,7 +123,7 @@ class TestAnalyticsStandaloneApp:
         client = TestClient(app)
 
         mock_client = _make_mock_client()
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "how many?"})
 
         body = response.json()
@@ -140,7 +140,7 @@ class TestAnalyticsStandaloneApp:
         client = TestClient(app)
 
         mock_client = _make_mock_client()
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "how many?"})
 
         body = response.json()

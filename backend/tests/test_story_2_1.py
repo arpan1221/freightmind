@@ -173,7 +173,7 @@ class TestPostQueryRoute:
             answer_response="The average freight cost varies by mode: Air $1000, Ocean $500, Truck $200.",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "What is average freight cost per mode?"})
 
         assert response.status_code == 200
@@ -198,7 +198,7 @@ class TestPostQueryRoute:
             answer_response="There are 3 shipments: Air at $1000, Ocean at $500, Truck at $200.",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "list all modes and costs"})
 
         assert response.status_code == 200
@@ -219,7 +219,7 @@ class TestPostQueryRoute:
             "DROP TABLE shipments",      # executor
         ])
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "drop all data"})
 
         assert response.status_code == 400
@@ -242,7 +242,7 @@ class TestPostQueryRoute:
             f"{keyword} TABLE shipments", # executor
         ])
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "bad question"})
 
         assert response.status_code == 400
@@ -262,7 +262,7 @@ class TestPostQueryRoute:
             answer_response="Average freight cost is $566.67.",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": unique_question})
 
         assert response.status_code == 200
@@ -303,7 +303,7 @@ class TestPostQueryRoute:
             answer_response="There are 3 shipments.",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "how many shipments?"})
 
         assert response.status_code == 200
@@ -333,7 +333,7 @@ class TestPostQueryRoute:
             answer_response="",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "how many?"})
 
         assert response.status_code == 200
@@ -352,7 +352,7 @@ class TestPostQueryRoute:
             answer_response="3 shipments.",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "count"})
 
         body = response.json()
@@ -373,7 +373,7 @@ class TestPostQueryRoute:
             answer_response="3 shipments total.",
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={
@@ -399,7 +399,7 @@ class TestPostQueryRoute:
 
         injection_attempt = "SELECT * FROM shipments; DROP TABLE shipments"
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "count", "previous_sql": injection_attempt},
@@ -428,7 +428,7 @@ class TestPostQueryRoute:
         # Simulate classify_intent returning non-JSON (triggers classification_failed path)
         mock_client.call = AsyncMock(return_value="this is not json")
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "what is the cost?"})
 
         assert response.status_code == 200

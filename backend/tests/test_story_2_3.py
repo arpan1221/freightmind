@@ -270,7 +270,7 @@ class TestPostQueryChartConfig:
             '{"type": "bar", "x_key": "shipment_mode", "y_key": "avg_cost"}'
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "What is average freight cost by mode?"},
@@ -291,7 +291,7 @@ class TestPostQueryChartConfig:
 
         mock_client = _make_mock_client_with_chart("null")
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "List all vendor names"},
@@ -314,7 +314,7 @@ class TestPostQueryChartConfig:
             ]
         )
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post(
                 "/api/query",
                 json={"question": "What is the weather today?"},
@@ -331,7 +331,7 @@ class TestPostQueryChartConfig:
 
         mock_client = _make_mock_client_with_chart("null")
 
-        with patch("app.api.routes.analytics.ModelClient", return_value=mock_client):
+        with patch("app.api.routes.analytics.ModelClient.for_analytics", return_value=mock_client):
             response = client.post("/api/query", json={"question": "count shipments"})
 
         assert "chart_config" in response.json()
