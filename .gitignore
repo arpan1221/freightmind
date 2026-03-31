@@ -25,6 +25,13 @@ node_modules/
 frontend/.env
 frontend/.env.local
 
+# Local / private planning docs (not for the remote repo)
+BMAD_BRAIN_DUMP.md
+BMAD_PROJECT_PLAN.md
+DATASET_SCHEMA.md
+TECH_DECISIONS.md
+DAW_AI_SSE_Part 1_Assignment.pdf
+
 # OS
 .DS_Store
 Thumbs.db

@@ -2,7 +2,7 @@
 stepsCompleted: ['step-01-init', 'step-02-context', 'step-03-starter', 'step-04-decisions', 'step-05-patterns', 'step-06-structure', 'step-07-validation', 'step-08-complete']
 status: 'complete'
 completedAt: '2026-03-30'
-inputDocuments: ['_bmad-output/planning-artifacts/prd.md', '_bmad-output/planning-artifacts/product-brief.md', 'TECH_DECISIONS.md', 'DATASET_SCHEMA.md']
+inputDocuments: ['_bmad-output/planning-artifacts/prd.md', '_bmad-output/planning-artifacts/product-brief.md']
 workflowType: 'architecture'
 project_name: 'freightmind'
 user_name: 'Arpan'
