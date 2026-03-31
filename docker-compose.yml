@@ -1,17 +1,24 @@
+# Local full stack: copy `.env.example` → `.env` at repo root, set OPENROUTER_API_KEY, then:
+#   docker compose up --build
+# (Legacy CLI: `docker-compose up --build`)
+# Frontend uses NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 so browser calls map to host port 8000.
+
 services:
   backend:
     build: ./backend
     ports:
       - "8000:8000"
-    env_file: ./backend/.env
+    env_file: .env
+    # Image runs as uid 1000; ensure host ./backend/cache is writable (e.g. mkdir -p backend/cache && chown -R 1000:1000 backend/cache)
     volumes:
       - ./backend/cache:/app/cache
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:8000
     depends_on:
       - backend

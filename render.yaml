@@ -1,0 +1,17 @@
+# Render Blueprint — FreightMind backend (Story 6.2)
+# https://render.com/docs/blueprint-spec
+#
+# After connecting this repo: New → Blueprint → apply this file, then set
+# OPENROUTER_API_KEY in the dashboard (Secret) or via `render env set`.
+
+services:
+  - type: web
+    name: freightmind-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
