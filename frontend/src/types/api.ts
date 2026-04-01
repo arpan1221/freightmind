@@ -6,9 +6,10 @@ export interface AnalyticsQueryRequest {
 }
 
 export interface ChartConfig {
-  type: "bar" | "line" | "pie";
+  type: "bar" | "line" | "pie" | "scatter" | "stacked_bar";
   x_key: string;
   y_key: string;
+  y_keys?: string[] | null;
 }
 
 export interface AnalyticsQueryResponse {
@@ -48,6 +49,21 @@ export interface ExtractionResponse {
   low_confidence_fields: string[];
   error: string | null;
   message: string | null;
+}
+
+export interface ExtractedDocumentSummary {
+  extraction_id: number;
+  filename: string;
+  extracted_at: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  shipment_mode: string | null;
+  destination_country: string | null;
+  total_freight_cost_usd: number | null;
+}
+
+export interface ExtractionListResponse {
+  extractions: ExtractedDocumentSummary[];
 }
 
 export interface ConfirmRequest {

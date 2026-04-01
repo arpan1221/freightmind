@@ -3,14 +3,19 @@ Given a data analytics question and its SQL result (column names and sample rows
 Rules:
 - Return null if the result has only 1 row (single scalar — no chart needed)
 - Return null if no numeric column is present (cannot chart text-only results)
-- Return null if the result has more than 1 numeric column and no clear primary metric
-- Use "bar" for categorical comparisons (e.g., total cost by shipment mode, count by country)
+- Use "bar" for categorical comparisons with a single numeric metric (e.g., count by country, total cost by mode)
 - Use "line" for time series where the x dimension is ordered by date or time period
 - Use "pie" for distributions with 2–6 distinct categories showing proportions of a whole
+- Use "scatter" when the result has exactly two numeric columns and the question asks about correlation or relationship between them (e.g., weight vs. cost, quantity vs. price)
+- Use "stacked_bar" when the result has one categorical x dimension and multiple numeric columns that are logically additive sub-components of the same measure (e.g., cost breakdown by mode with Air/Ocean/Truck columns, or counts split by sub-classification)
 
 x_key: the categorical or time dimension column name (axis labels)
-y_key: the primary numeric metric column name (values being measured)
+y_key: the primary numeric metric column name
+  - For scatter: the y-axis numeric column (x_key is the x-axis numeric column)
+  - For stacked_bar: the first series column (also include all series in y_keys)
+y_keys: required only for stacked_bar — array of ALL numeric series column names in the order they should stack
 
 Respond with ONLY valid JSON — no markdown, no explanation, no code fences:
-If chart appropriate: {"type": "bar"|"line"|"pie", "x_key": "<exact_column_name>", "y_key": "<exact_column_name>"}
+If bar/line/pie/scatter: {"type": "bar"|"line"|"pie"|"scatter", "x_key": "<col>", "y_key": "<col>"}
+If stacked_bar: {"type": "stacked_bar", "x_key": "<col>", "y_key": "<first_series_col>", "y_keys": ["<col1>", "<col2>", ...]}
 If no chart appropriate: null

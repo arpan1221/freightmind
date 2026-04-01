@@ -660,17 +660,26 @@ async def _generate_chart_config(
         result = json.loads(cleaned.strip())
         if result is None:
             return None
-        if (
-            isinstance(result, dict)
-            and result.get("type") in ("bar", "line", "pie")
-            and isinstance(result.get("x_key"), str)
-            and isinstance(result.get("y_key"), str)
-            and result["x_key"] in columns
-            and result["y_key"] in columns
+        if isinstance(result, dict) and result.get("type") in (
+            "bar", "line", "pie", "scatter", "stacked_bar"
         ):
-            return ChartConfig(
-                type=result["type"], x_key=result["x_key"], y_key=result["y_key"]
-            )
+            chart_type = result["type"]
+            x_key = result.get("x_key")
+            y_key = result.get("y_key") or ""
+            y_keys = result.get("y_keys")
+
+            if not isinstance(x_key, str) or x_key not in columns:
+                logger.warning("_generate_chart_config invalid x_key: %s", result)
+            elif chart_type == "stacked_bar":
+                if isinstance(y_keys, list) and all(k in columns for k in y_keys) and len(y_keys) >= 2:
+                    return ChartConfig(type=chart_type, x_key=x_key, y_key=y_keys[0], y_keys=y_keys)
+                logger.warning("_generate_chart_config invalid y_keys for stacked_bar: %s", result)
+            elif chart_type == "scatter":
+                if isinstance(y_key, str) and y_key in columns:
+                    return ChartConfig(type=chart_type, x_key=x_key, y_key=y_key)
+                logger.warning("_generate_chart_config invalid y_key for scatter: %s", result)
+            elif isinstance(y_key, str) and y_key in columns:
+                return ChartConfig(type=chart_type, x_key=x_key, y_key=y_key)
         logger.warning("_generate_chart_config invalid structure: %s", result)
     except (json.JSONDecodeError, ValueError):
         logger.warning("_generate_chart_config JSON parse failed: %s", raw[:100])

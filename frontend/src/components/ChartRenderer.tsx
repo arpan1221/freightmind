@@ -8,6 +8,8 @@ import {
   PieChart,
   Pie,
   Cell,
+  ScatterChart,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -37,12 +39,11 @@ export default function ChartRenderer({
   columns,
   rows,
 }: ChartRendererProps) {
-  // Convert columns/rows (backend format) → Recharts-compatible object array
   const data = rows.map((row) =>
     Object.fromEntries(columns.map((col, i) => [col, row[i]]))
   );
 
-  const { type, x_key, y_key } = chartConfig;
+  const { type, x_key, y_key, y_keys } = chartConfig;
 
   if (type === "bar") {
     return (
@@ -54,6 +55,29 @@ export default function ChartRenderer({
           <Tooltip />
           <Legend />
           <Bar dataKey={y_key} fill={CHART_COLORS[0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (type === "stacked_bar") {
+    const series = y_keys && y_keys.length >= 2 ? y_keys : [y_key];
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey={x_key} />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          {series.map((key, i) => (
+            <Bar
+              key={key}
+              dataKey={key}
+              stackId="stack"
+              fill={CHART_COLORS[i % CHART_COLORS.length]}
+            />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     );
@@ -102,6 +126,29 @@ export default function ChartRenderer({
           <Tooltip />
           <Legend />
         </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (type === "scatter") {
+    const scatterData = data.map((d) => ({
+      x: d[x_key],
+      y: d[y_key],
+    }));
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <ScatterChart>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="x" name={x_key} type="number" />
+          <YAxis dataKey="y" name={y_key} type="number" />
+          <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+          <Legend />
+          <Scatter
+            name={`${x_key} vs ${y_key}`}
+            data={scatterData}
+            fill={CHART_COLORS[0]}
+          />
+        </ScatterChart>
       </ResponsiveContainer>
     );
   }

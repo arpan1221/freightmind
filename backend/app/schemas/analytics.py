@@ -4,9 +4,10 @@ from pydantic import BaseModel, Field
 
 
 class ChartConfig(BaseModel):
-    type: Literal["bar", "line", "pie"]
+    type: Literal["bar", "line", "pie", "scatter", "stacked_bar"]
     x_key: str
     y_key: str
+    y_keys: list[str] | None = None  # stacked_bar: multiple series
 
 
 class AnalyticsQueryRequest(BaseModel):
