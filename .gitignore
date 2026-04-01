@@ -25,6 +25,14 @@ node_modules/
 frontend/.env
 frontend/.env.local
 
+# Demo recording script (internal prep — not for evaluators)
+demo/demo-10-full-submission-demo.md
+
+# Root-level demo scripts superseded by demo/ directory
+DEMO_SCRIPT.md
+DEMO_SCRIPT_2.md
+DEMO_SCRIPT_3.md
+
 # Local / private planning docs (not for the remote repo)
 BMAD_BRAIN_DUMP.md
 BMAD_PROJECT_PLAN.md

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     vision_model: str = "nvidia/nemotron-nano-12b-v2-vl:free"
     # Fallback when primary vision model fails after retries (Story 5.5, TECH_DECISIONS TD-3).
     vision_model_fallback: str = "qwen/qwen2.5-vl-7b-instruct:free"
-    vision_timeout: float = 30.0
+    vision_timeout: float = 120.0
     # Passed to OpenRouter as max_tokens on every chat completion. High defaults (e.g. model
     # max) can trigger 402 on low-credit accounts; keep this within typical output needs.
     llm_max_tokens: int = 2048
@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     # Maximum upload size for POST /api/documents/extract (bytes).
     max_upload_bytes: int = 10 * 1024 * 1024
+    # Live seeding: drip synthetic rows into shipments at this interval (seconds).
+    # 0 = disabled (default). Set to e.g. 30 in .env for demo live-data effect.
+    live_seeding_interval_seconds: int = 0
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

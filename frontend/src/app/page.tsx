@@ -15,6 +15,16 @@ import type { SchemaInfoResponse } from "@/types/api";
 
 type Tab = "analytics" | "documents";
 
+interface LiveStats {
+  shipments: number;
+  extracted_documents: number;
+  extracted_line_items: number;
+  live_seeding_active: boolean;
+  live_seeding_interval_seconds: number;
+}
+
+const LIVE_POLL_INTERVAL_MS = 5000;
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
   const [schema, setSchema] = useState<SchemaInfoResponse | null>(null);
@@ -23,6 +33,8 @@ export default function Home() {
     message: string;
     retryAfterSeconds: number | null;
   } | null>(null);
+  const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
+  const [flashedTables, setFlashedTables] = useState<Set<string>>(new Set());
 
   const loadSchema = useCallback((options?: { silent?: boolean }) => {
     const silent = options?.silent === true;
@@ -60,13 +72,51 @@ export default function Home() {
       });
   }, []);
 
+  // Poll /api/stats/live to keep row counts fresh when live seeding is active
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = () => {
+      api
+        .get<LiveStats>("/api/stats/live")
+        .then((res) => {
+          const next = res.data;
+          setLiveStats((prev) => {
+            if (!prev) return next;
+            // Detect which tables gained rows and flash them
+            const flashed = new Set<string>();
+            for (const key of ["shipments", "extracted_documents", "extracted_line_items"] as const) {
+              if (next[key] > prev[key]) flashed.add(key);
+            }
+            if (flashed.size > 0) {
+              setFlashedTables(flashed);
+              setTimeout(() => setFlashedTables(new Set()), 1200);
+            }
+            return next;
+          });
+        })
+        .catch(() => {
+          // silent — live stats are best-effort
+        });
+    };
+
+    poll(); // immediate first fetch
+    intervalId = setInterval(poll, LIVE_POLL_INTERVAL_MS);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
   useEffect(() => {
     loadSchema();
   }, [loadSchema]);
 
   const shipmentsCount =
+    liveStats?.shipments ??
     schema?.tables?.find((t) => t.table_name === "shipments")?.row_count ?? 0;
   const extractedCount =
+    liveStats?.extracted_documents ??
     schema?.tables?.find((t) => t.table_name === "extracted_documents")
       ?.row_count ?? 0;
 
@@ -84,7 +134,12 @@ export default function Home() {
         />
       )}
 
-      <DatasetStatus schema={schema} isLoading={isLoadingSchema} />
+      <DatasetStatus
+        schema={schema}
+        isLoading={isLoadingSchema}
+        liveStats={liveStats}
+        flashedTables={flashedTables}
+      />
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-slate-200 mb-6">

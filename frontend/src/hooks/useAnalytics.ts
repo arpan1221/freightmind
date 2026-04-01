@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getApiBaseUrl } from "@/lib/getApiBaseUrl";
 import {
   getErrorResponseFromUnknown,
@@ -44,14 +44,46 @@ function errorResponseFromJson(data: unknown): ErrorResponse | null {
   return data as ErrorResponse;
 }
 
+const SESSION_MESSAGES_KEY = "fm_chat_messages";
+const SESSION_SQL_KEY = "fm_chat_previous_sql";
+
+function loadFromSession<T>(key: string, fallback: T): T {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveToSession(key: string, value: unknown) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // sessionStorage full or unavailable — silently ignore
+  }
+}
+
 export function useAnalytics() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() =>
+    loadFromSession<Message[]>(SESSION_MESSAGES_KEY, [])
+  );
   const [isQuerying, setIsQuerying] = useState(false);
   const [errorToast, setErrorToast] = useState<AnalyticsErrorToastState | null>(
     null
   );
   const [rateLimited, setRateLimited] = useState(false);
-  const [previousSql, setPreviousSql] = useState<string | null>(null);
+  const [previousSql, setPreviousSql] = useState<string | null>(() =>
+    loadFromSession<string | null>(SESSION_SQL_KEY, null)
+  );
+
+  useEffect(() => {
+    saveToSession(SESSION_MESSAGES_KEY, messages);
+  }, [messages]);
+
+  useEffect(() => {
+    saveToSession(SESSION_SQL_KEY, previousSql);
+  }, [previousSql]);
 
   const onRateLimitComplete = useCallback(() => {
     setRateLimited(false);
@@ -303,6 +335,8 @@ export function useAnalytics() {
     setRateLimited(false);
     setPreviousSql(null);
     setIsQuerying(false);
+    sessionStorage.removeItem(SESSION_MESSAGES_KEY);
+    sessionStorage.removeItem(SESSION_SQL_KEY);
   }
 
   const inputDisabled = isQuerying || rateLimited;

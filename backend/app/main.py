@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,17 +18,50 @@ import app.models.extracted_document  # noqa: F401
 import app.models.extracted_line_item  # noqa: F401
 from app.schemas.common import ErrorResponse
 from app.api.routes import analytics, documents, extraction, system
+from app.api.routes import demo as demo_routes
+from app.services.stats_service import compute_and_store, create_stats_table
 
 logger = logging.getLogger(__name__)
+
+
+async def _live_seed_loop(interval: int) -> None:
+    """Background task: drip synthetic rows into shipments at a fixed interval.
+
+    Rotates through the three demo scenarios so each wake-up adds a different
+    type of data. After each insert, stats are refreshed so anomaly detection
+    reflects the new distribution immediately.
+    """
+    from app.services.data_seeder import AVAILABLE_SCENARIOS, seed_scenario
+    from app.services.stats_service import compute_and_store as _refresh
+
+    scenarios = list(AVAILABLE_SCENARIOS.keys())
+    idx = 0
+    logger.info("Live seeding enabled — interval %ds, scenarios: %s", interval, scenarios)
+    while True:
+        await asyncio.sleep(interval)
+        scenario = scenarios[idx % len(scenarios)]
+        idx += 1
+        try:
+            db = SessionLocal()
+            try:
+                inserted = seed_scenario(db, scenario)
+                _refresh(db)
+                logger.info("Live seed: %s — %d rows inserted", scenario, inserted)
+            finally:
+                db.close()
+        except Exception:
+            logger.warning("Live seed iteration failed", exc_info=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         init_db()  # Story 1.2: idempotent table + index creation
+        create_stats_table()  # ensure _stats_cache exists before CSV load
         db = SessionLocal()
         try:
             load_shipments_from_csv(db, CSV_PATH)  # Story 1.3: seed on cold start
+            compute_and_store(db)  # build statistical baseline from loaded data
         finally:
             db.close()
     except FileNotFoundError:
@@ -36,7 +70,21 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("Startup sequence failed: %s", exc)
         raise
+
+    task = None
+    if settings.live_seeding_interval_seconds > 0:
+        task = asyncio.create_task(
+            _live_seed_loop(settings.live_seeding_interval_seconds)
+        )
+
     yield
+
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="FreightMind API", lifespan=lifespan)
@@ -117,3 +165,4 @@ app.include_router(system.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(extraction.router, prefix="/api")
+app.include_router(demo_routes.router, prefix="/api")

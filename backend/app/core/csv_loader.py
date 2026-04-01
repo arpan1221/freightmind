@@ -96,6 +96,30 @@ def load_shipments_from_csv(session: Session, csv_path: Path = CSV_PATH) -> int:
     # Rename CSV headers to ORM column names.
     df = df.rename(columns=COLUMN_MAP)
 
+    # Impute freight_cost_usd for rows where weight_kg is known but freight is NULL.
+    # Uses mode-specific average cost-per-kg computed from rows that have both values.
+    # Only ~197 rows qualify; the ~3,929 rows missing both columns are left as NULL.
+    rates = (
+        df[df["freight_cost_usd"].notna() & df["weight_kg"].notna() & (df["weight_kg"] > 0)]
+        .assign(_rate=lambda x: x["freight_cost_usd"] / x["weight_kg"])
+        .groupby("shipment_mode")["_rate"]
+        .mean()
+    )
+    impute_mask = (
+        df["freight_cost_usd"].isna()
+        & df["weight_kg"].notna()
+        & (df["weight_kg"] > 0)
+        & df["shipment_mode"].isin(rates.index)
+    )
+    df.loc[impute_mask, "freight_cost_usd"] = df.loc[impute_mask].apply(
+        lambda row: round(row["weight_kg"] * rates[row["shipment_mode"]], 2), axis=1
+    )
+    logger.info(
+        "Imputed freight_cost_usd for %d rows using mode-avg cost/kg rates: %s",
+        int(impute_mask.sum()),
+        {mode: round(float(rate), 4) for mode, rate in rates.items()},
+    )
+
     # Convert ALL remaining NaN / NaT to Python None → SQLite NULL.
     # df.where() alone is insufficient in pandas 3.x with mixed dtypes;
     # do an explicit per-value cleanup pass after to_dict() for safety.

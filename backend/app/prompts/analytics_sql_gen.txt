@@ -2,6 +2,8 @@ Generate a single valid SQLite SELECT query (or a single statement using UNION A
 
 You may query **shipments**, **extracted_documents**, and **extracted_line_items** as needed.
 
+**Table selection rule:** Only include `extracted_documents` or `extracted_line_items` in the query if the user's question explicitly references their own data — e.g. "my invoice", "my upload", "confirmed extraction", "document I uploaded". If the question is purely about the historical dataset with no mention of uploads, query **only** `shipments`.
+
 ---
 
 Table: **shipments**
@@ -41,19 +43,21 @@ Join **extracted_line_items** to **extracted_documents** ON extracted_line_items
 Rules:
 1. Output ONLY the raw SQL — no markdown, no code fences, no explanation
 2. Use only read-only SELECT (including UNION ALL / subqueries) — never DROP, DELETE, UPDATE, INSERT, ALTER, CREATE, REPLACE, ATTACH, PRAGMA, EXEC
-3. For **shipments**: add WHERE freight_cost_usd IS NOT NULL when computing averages or sums on freight cost; same for weight_kg when aggregating weight
+3. For **shipments**: add WHERE freight_cost_usd IS NOT NULL **only** when computing AVG or SUM on freight_cost_usd; same for weight_kg only when aggregating weight. Do NOT add these filters for COUNT queries or queries that do not reference those columns.
 4. Use strftime('%Y', scheduled_delivery_date) for year-based grouping on **shipments** date columns
 5. Limit result rows to 100 unless the user asks for all records
 6. Use exact column names as listed — do not invent column names
-7. For linkage across sources, align **destination_country** / **shipment_mode** vocabulary with **shipments** when comparing to the historical dataset
+7. For linkage across sources, align **destination_country** / **shipment_mode** vocabulary with **shipments** when comparing to the historical dataset. In `extracted_documents`, use `destination_country` (not `origin_country`) to match against `shipments.country`.
 
-8. **Cross-table comparison (Story 4.2 / FR27):** When the user compares or combines **historical SCMS shipments** with **their confirmed uploads**, emit a single statement that references **both** `shipments` and `extracted_documents` using **UNION ALL** (often with a literal `source` or `dataset` column) or a **JOIN** on comparable dimensions (e.g. `shipment_mode`, `destination_country`). Filter confirmed uploads with `confirmed_by_user = 1` unless they ask for pending rows.
+8. **Cross-table comparison (Story 4.2 / FR27):** When the user compares or combines **historical SCMS shipments** with **their confirmed uploads**, use **UNION ALL** with a literal `source` label column. Do NOT JOIN the two tables on vendor/shipper names — those values will not match. Filter confirmed uploads with `confirmed_by_user = 1` unless they ask for pending rows.
 
-Example pattern (adapt column names and filters to the question):
-SELECT 'dataset' AS source, AVG(freight_cost_usd) AS avg_freight
-FROM shipments WHERE shipment_mode = 'Air' AND freight_cost_usd IS NOT NULL
+Correct UNION ALL pattern (adapt filters to the question):
+SELECT 'Your confirmed invoice' AS source, total_freight_cost_usd AS freight_cost_usd
+FROM extracted_documents WHERE confirmed_by_user = 1
 UNION ALL
-SELECT 'extracted' AS source, AVG(total_freight_cost_usd)
-FROM extracted_documents WHERE shipment_mode = 'Air' AND confirmed_by_user = 1
+SELECT 'Dataset average (Air / Nigeria)' AS source, AVG(freight_cost_usd)
+FROM shipments WHERE shipment_mode = 'Air' AND country = 'Nigeria' AND freight_cost_usd IS NOT NULL
 
-9. Prefer **UNION ALL** when returning parallel aggregates from two tables; use **JOIN** when the question needs a single merged row set with aligned keys.
+9. Prefer **UNION ALL** when returning parallel aggregates from two tables. Only JOIN `extracted_documents` to `extracted_line_items` (on document_id) — never JOIN `shipments` to `extracted_documents` on name/vendor fields.
+
+10. **ONLY** reference the three tables above (`shipments`, `extracted_documents`, `extracted_line_items`). Never JOIN or SELECT from any other table name — the database contains no other tables. If the question can be answered from a column that already exists (e.g. `shipments.country`), use that column directly; do not create a lookup or normalisation join to a table that is not listed here.

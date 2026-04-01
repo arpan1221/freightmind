@@ -24,6 +24,7 @@ from app.schemas.analytics import (
 )
 from app.schemas.common import ErrorResponse
 from app.services.model_client import ModelClient
+from app.services.stats_service import detect_anomaly
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class _RowsBundle:
     rows: list[list]
     row_count: int
     null_exclusions: dict[str, int]
+    anomaly_context: str | None = None
 
 
 def _sql_crosses_shipments_and_extracted(sql: str) -> bool:
@@ -290,6 +292,12 @@ async def _run_pipeline_to_rows(
 
         null_exclusions = _count_null_exclusions(db, safe_sql)
 
+        anomaly_ctx: str | None = None
+        try:
+            anomaly_ctx = detect_anomaly(db, safe_sql, columns, rows)
+        except Exception:
+            logger.debug("anomaly detection skipped", exc_info=True)
+
         return _RowsBundle(
             client=client,
             question=body.question,
@@ -298,6 +306,7 @@ async def _run_pipeline_to_rows(
             rows=rows,
             row_count=row_count,
             null_exclusions=null_exclusions,
+            anomaly_context=anomaly_ctx,
         )
 
     except (RateLimitError, ModelUnavailableError):
@@ -342,7 +351,8 @@ async def post_query(
     rb = phase
     try:
         answer = await _generate_answer(
-            rb.client, rb.question, rb.safe_sql, rb.columns, rb.rows, rb.null_exclusions
+            rb.client, rb.question, rb.safe_sql, rb.columns, rb.rows,
+            rb.null_exclusions, rb.anomaly_context,
         )
 
         chart_config = await _generate_chart_config(
@@ -446,6 +456,7 @@ async def post_query_stream(
             rb.columns,
             rb.rows,
             rb.null_exclusions,
+            rb.anomaly_context,
         )
         parts: list[str] = []
         try:
@@ -531,6 +542,7 @@ def _answer_messages(
     columns: list[str],
     rows: list[list],
     null_exclusions: dict[str, int],
+    anomaly_context: str | None = None,
 ) -> list[dict[str, str]]:
     """Chat messages for the analytics natural-language answer (shared by sync and stream)."""
     preview_rows = rows[:_MAX_ROWS_IN_ANSWER_CONTEXT]
@@ -553,6 +565,7 @@ def _answer_messages(
         f"Rows (first {len(preview_rows)} of {len(rows)}): {preview_rows}\n"
         f"NULL exclusions: {null_info}"
         f"{linkage_note}"
+        f"{anomaly_context or ''}"
     )
     return [
         {"role": "system", "content": load_prompt("analytics_answer")},
@@ -567,8 +580,9 @@ async def _generate_answer(
     columns: list[str],
     rows: list[list],
     null_exclusions: dict[str, int],
+    anomaly_context: str | None = None,
 ) -> str:
-    messages = _answer_messages(question, sql, columns, rows, null_exclusions)
+    messages = _answer_messages(question, sql, columns, rows, null_exclusions, anomaly_context)
     return await client.call(
         model=settings.analytics_model, messages=messages, temperature=0.0
     )
