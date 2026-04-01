@@ -4,7 +4,7 @@ FreightMind is a proof-of-concept logistics analytics app: you ask natural-langu
 
 ## Development methodology — BMAD
 
-FreightMind was built using the **[BMAD framework](https://github.com/bmad-framework/bmad)** (Brains, Methods, Agents, Decisions) — a spec-driven development approach where every layer of the system is fully specified before a line of code is written. The process runs through a structured agent sequence:
+FreightMind was built using the **[BMad Method](https://github.com/bmad-code-org/BMAD-METHOD)** (Build More, Architect Dreams) — an AI-driven agile development framework where every layer of the system is fully specified before a line of code is written. The process runs through a structured agent sequence:
 
 **Product Brief → PRD → Architecture → Epics & Stories → Implementation → Review**
 
