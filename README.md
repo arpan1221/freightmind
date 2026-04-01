@@ -238,6 +238,10 @@ Tiers 3 and 4 together are a form of **retrieval-augmented SQL generation**: pas
 
 The statistical foundation already built (`_stats_cache`, 11 dimensions) is the seed of a Tier 2 classifier. A significant fraction of natural-language analytics questions resolve to an aggregate over one of those 11 dimensions. Routing these to a direct table lookup rather than SQL generation would eliminate the most common class of LLM calls before any semantic search is needed.
 
+---
+
+## Prerequisites
+
 - **Docker** with Compose v2 (`docker compose`) or legacy `docker-compose`
 - An **OpenRouter API key** ([openrouter.ai](https://openrouter.ai)) — needed for vision extraction; analytics can run fully local via Ollama
 - **Claude Code** (optional but recommended) — run `/freightmind-setup` for an interactive wizard that configures `.env` in ~1 minute
