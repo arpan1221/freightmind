@@ -118,6 +118,15 @@ In **live seeding mode** (`LIVE_SEEDING_INTERVAL_SECONDS > 0`) the backend runs 
 | Local orchestration | Docker Compose at repo root |
 | Setup | `/freightmind-setup` Claude Code skill — interactive wizard that writes `.env` and prints start commands |
 
+### Model selection and testing verdict
+
+| Agent | OpenRouter (cloud) | Ollama (local) |
+|-------|-------------------|----------------|
+| **Analytics** (SQL generation, answer synthesis) | `meta-llama/llama-3.3-70b-instruct` | `llama3.1:8b` |
+| **Vision** (invoice extraction, confidence scoring) | `nvidia/nemotron-nano-12b-v2-vl:free` | `qwen3-vl:8b` |
+
+**Verdict:** The OpenRouter models are meaningfully better on both agents — the 70b analytics model produces more accurate SQL on first pass (fewer Verifier rejections, better cross-table linkage) and the Nemotron vision model extracts line items more reliably with higher confidence scores. That said, the majority of testing was done in **hybrid mode** (`ANALYTICS_PROVIDER=ollama`, `VISION_PROVIDER=openrouter`) — analytics on Ollama with the 8b model, vision on OpenRouter — which is a practical sweet spot: SQL generation on the local 8b is good enough for most queries while keeping vision extraction on the stronger cloud model. Full-cloud mode is recommended if accuracy on complex cross-table queries matters more than running costs.
+
 ## Data store schema
 
 Three core SQLite tables plus one internal stats table. Full column-mapping notes and linkage query examples are in [`DATASET_SCHEMA.md`](DATASET_SCHEMA.md).
