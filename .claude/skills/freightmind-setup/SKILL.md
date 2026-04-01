@@ -163,6 +163,27 @@ If not in `ollama list` output, show pull hint as in Step 3b.
 
 ---
 
+## Step 4b — Live seeding mode (optional)
+
+Ask this question after the vision model step:
+
+```
+Q5 │ Demo mode — live seeding
+   Live seeding drips synthetic rows into the database at a fixed interval.
+   The Shipments card on the dashboard pulses and updates automatically.
+   Leave at 0 for controlled demos (recommended for first run).
+
+   LIVE_SEEDING_INTERVAL_SECONDS [0]:
+```
+
+- Accept any integer ≥ 0. Default: `0` (off).
+- If the user enters a value > 0, show:
+  > "ℹ  Live seeding active. See demo/demo-03b-live-seeding.md for the walkthrough. Do not mix with demos 03–05 (controlled seeding) in the same session."
+
+Store as `LIVE_SEEDING_INTERVAL_SECONDS`.
+
+---
+
 ## Step 5 — Write .env
 
 Construct the full `.env` content using all collected values. Use this exact template, filling in `<VALUE>` with what was collected:
@@ -187,6 +208,10 @@ VISION_MODEL_FALLBACK=<VALUE>
 BYPASS_CACHE=false
 DATABASE_URL=sqlite:///./freightmind.db
 CACHE_DIR=./cache
+LLM_MAX_TOKENS=2048
+
+# Live seeding — 0 = off (controlled demos). Set to e.g. 30 for demo-03b.
+LIVE_SEEDING_INTERVAL_SECONDS=<VALUE>
 ```
 
 Omit `OLLAMA_BASE_URL` only if `provider_mode` is `1` (pure OpenRouter — Ollama URL is irrelevant).
@@ -217,8 +242,8 @@ Next steps:
        http://localhost:3000
        API docs: http://localhost:8000/docs
 
-  3. Run the demo (1–2 min):
-       See DEMO_SCRIPT.md for exact queries to type.
+  3. Run the master demo (≤2 min):
+       See demo/demo-00-master.md for exact queries, expected outputs, and timing.
 ```
 
 If any Ollama models need pulling, add:
