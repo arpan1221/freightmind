@@ -152,7 +152,68 @@ Analytics queries can JOIN or UNION the three core tables; the LLM is given the 
 
 ---
 
-## Prerequisites
+## Pipeline scalability — future direction
+
+Each analytics query currently traverses the full **Planner → Executor → Verifier** pipeline, generating up to six sequential LLM calls (SQL plan, SQL execution, verification, chart config, answer synthesis, follow-up suggestions). For a PoC this is acceptable; at production scale it is expensive and slow. The right long-term approach is a tiered query pipeline that short-circuits the generation steps wherever possible.
+
+### Current cost model
+
+| Step | LLM call | Skippable? |
+|------|----------|------------|
+| Planner: NL → SQL plan | yes | with warm cache |
+| Executor: plan → SQL | yes | with warm cache |
+| Verifier: validate SQL | yes | with warm cache |
+| Chart config | yes | with warm cache |
+| Answer synthesis | yes | with warm cache |
+| Follow-up suggestions | yes | with warm cache |
+
+The existing `ModelClient` SHA-256 cache already handles exact-match queries — identical question string, same model → cached response at zero cost. The gap is **semantic equivalents**: "top 5 countries by Air shipments" and "top 5 destinations for Air mode" hash differently but should resolve to the same SQL.
+
+### Proposed tiered architecture
+
+```
+Incoming NL question
+        │
+        ▼
+[Tier 1]  Exact hash cache              ← already implemented (ModelClient)
+          SHA-256(model + messages) → cached response
+        │ miss
+        ▼
+[Tier 2]  Aggregate classifier          ← partially implemented (_stats_cache)
+          Recognises aggregate-pattern questions (mean, count, distribution)
+          and routes directly to _stats_cache lookup — no LLM call at all.
+          Covers a large share of real-world analytics questions.
+        │ miss
+        ▼
+[Tier 3]  Semantic SQL cache            ← not yet implemented
+          Embed incoming question (small embedding model, ~$0.00002/call).
+          Search vector store of (question_embedding, validated_sql) pairs.
+          If cosine similarity > 0.92: adapt cached SQL via parameter
+          substitution (LIMIT, mode filter, country filter) and skip
+          generation entirely. Store every new validated SQL for future hits.
+        │ miss or low confidence
+        ▼
+[Tier 4]  Few-shot augmented generation ← not yet implemented
+          Retrieve top-3 semantically similar (question, sql) pairs from the
+          vector store and inject them into the Planner prompt as examples.
+          Does not reduce LLM calls but improves first-pass SQL quality,
+          reducing Verifier rejections and pipeline retries.
+        │
+        ▼
+[Tier 5]  Full pipeline (current behaviour)
+          Planner → Executor → Verifier → Answer → Follow-ups
+          Result stored in Tier 3 cache for future retrieval.
+```
+
+Tiers 1 and 2 are effectively free. Tier 3 trades one cheap embedding call for five expensive generation calls — at scale this is the highest-leverage optimisation. Tier 4 improves quality without adding cost at the pipeline level.
+
+### Why the RAG analogy is approximately correct
+
+Tiers 3 and 4 together are a form of **retrieval-augmented SQL generation**: past validated queries act as the knowledge base, incoming questions are the retrieval query, and the retrieved SQL (or examples) augment generation. The key difference from text RAG is that retrieved SQL cannot be included verbatim — it requires parameter adaptation (swapping filters, aggregations, LIMIT values) before it is safe to execute. This adaptation is the engineering challenge: for simple template-shaped queries it can be done with AST-level parameter substitution; for complex cross-table joins it may require a lightweight LLM rewrite pass.
+
+### `_stats_cache` as Tier 2 seed
+
+The statistical foundation already built (`_stats_cache`, 11 dimensions) is the seed of a Tier 2 classifier. A significant fraction of natural-language analytics questions resolve to an aggregate over one of those 11 dimensions. Routing these to a direct table lookup rather than SQL generation would eliminate the most common class of LLM calls before any semantic search is needed.
 
 - **Docker** with Compose v2 (`docker compose`) or legacy `docker-compose`
 - An **OpenRouter API key** ([openrouter.ai](https://openrouter.ai)) — needed for vision extraction; analytics can run fully local via Ollama
