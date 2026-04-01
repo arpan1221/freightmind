@@ -36,5 +36,6 @@ Rules:
 - invoice_date and delivery_date: extract as shown, do not convert format
 - shipment_mode: extract as shown, do not normalise
 - total_weight_kg: extract as a number in kg; if given in lbs or tonnes, do NOT convert
-- line_items: empty array [] if no line items visible
+- line_items: Extract EVERY individual charge line you can see. Any row that has a description/service name AND an amount is a line item. Common examples: "Ocean Freight", "Origin Charges", "Destination Charges", "THC", "Documentation Fee", "Insurance", "Fuel Surcharge", "Handling Fee". If the invoice has a charges table or itemised fee section — it has line items. Do NOT return [] when charges rows are visible.
+- line_items: only return [] if the document has absolutely no itemised charges section at all
 - line_items confidence: never use NOT_FOUND for line items; use LOW if uncertain

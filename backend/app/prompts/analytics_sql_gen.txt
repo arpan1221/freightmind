@@ -1,8 +1,10 @@
 Generate a single valid SQLite SELECT query (or a single statement using UNION ALL / subqueries) based on the user's question.
 
+If a "Previous SQL" is provided, use it only to understand what columns and tables were recently queried — do NOT copy its structure, filters, or groupings onto the new question. Each question requires its own query built from scratch from the user's intent.
+
 You may query **shipments**, **extracted_documents**, and **extracted_line_items** as needed.
 
-**Table selection rule:** Only include `extracted_documents` or `extracted_line_items` in the query if the user's question explicitly references their own data — e.g. "my invoice", "my upload", "confirmed extraction", "document I uploaded". If the question is purely about the historical dataset with no mention of uploads, query **only** `shipments`.
+**Table selection rule:** Only include `extracted_documents` or `extracted_line_items` if the user's question explicitly references their own data — e.g. "my invoice", "my upload", "confirmed extraction". If the question is purely about the historical dataset with no mention of uploads, query **only** `shipments`.
 
 ---
 
@@ -26,8 +28,20 @@ shipment_mode TEXT, carrier_vendor TEXT, total_weight_kg REAL, total_freight_cos
 total_insurance_usd REAL, payment_terms TEXT, delivery_date TEXT,
 extraction_confidence REAL, extracted_at TEXT, confirmed_by_user INTEGER
 
+Column name differences between tables — use the exact name for each table or queries will fail:
+- Freight cost: `shipments.freight_cost_usd` vs `extracted_documents.total_freight_cost_usd`
+- Weight: `shipments.weight_kg` vs `extracted_documents.total_weight_kg`
+- Insurance: `shipments.line_item_insurance_usd` vs `extracted_documents.total_insurance_usd`
+
 When the user asks about **their** uploaded/confirmed invoice data, use **confirmed_by_user = 1**.
 For pending-only review rows (not yet confirmed), use **confirmed_by_user = 0** only if they explicitly ask for unconfirmed/pending uploads.
+
+**Singular vs plural document references:**
+- Singular phrasing ("my invoice", "my confirmed invoice", "my last invoice"): scope to the single most recently confirmed document using `ORDER BY extracted_at DESC LIMIT 1`.
+- Plural / aggregate phrasing ("my invoices", "which confirmed invoices", "all my uploads"): use `confirmed_by_user = 1` WITHOUT LIMIT — return or compare all confirmed rows.
+- When a single invoice value is compared against a dataset aggregate, treat as singular and apply `ORDER BY extracted_at DESC LIMIT 1` inside the subquery for that invoice.
+
+**"Dataset" always means `shipments`:** "The dataset average", "the dataset", "historical data", "compared to the data" all refer to the `shipments` table, never `extracted_documents`.
 
 ---
 
@@ -36,28 +50,21 @@ Columns: id INTEGER, document_id INTEGER, description TEXT, quantity INTEGER,
 unit_price REAL, total_price REAL, confidence REAL
 Foreign key: document_id → extracted_documents.id
 
-Join **extracted_line_items** to **extracted_documents** ON extracted_line_items.document_id = extracted_documents.id when the question needs line-item detail. Prefer **confirmed_by_user = 1** on the document unless the question says otherwise.
+Join extracted_line_items to extracted_documents ON document_id when the question needs line-item detail. Prefer confirmed_by_user = 1 unless otherwise specified.
 
 ---
 
 Rules:
 1. Output ONLY the raw SQL — no markdown, no code fences, no explanation
 2. Use only read-only SELECT (including UNION ALL / subqueries) — never DROP, DELETE, UPDATE, INSERT, ALTER, CREATE, REPLACE, ATTACH, PRAGMA, EXEC
-3. For **shipments**: add WHERE freight_cost_usd IS NOT NULL **only** when computing AVG or SUM on freight_cost_usd; same for weight_kg only when aggregating weight. Do NOT add these filters for COUNT queries or queries that do not reference those columns.
-4. Use strftime('%Y', scheduled_delivery_date) for year-based grouping on **shipments** date columns
-5. Limit result rows to 100 unless the user asks for all records
-6. Use exact column names as listed — do not invent column names
-7. For linkage across sources, align **destination_country** / **shipment_mode** vocabulary with **shipments** when comparing to the historical dataset. In `extracted_documents`, use `destination_country` (not `origin_country`) to match against `shipments.country`.
-
-8. **Cross-table comparison (Story 4.2 / FR27):** When the user compares or combines **historical SCMS shipments** with **their confirmed uploads**, use **UNION ALL** with a literal `source` label column. Do NOT JOIN the two tables on vendor/shipper names — those values will not match. Filter confirmed uploads with `confirmed_by_user = 1` unless they ask for pending rows.
-
-Correct UNION ALL pattern (adapt filters to the question):
-SELECT 'Your confirmed invoice' AS source, total_freight_cost_usd AS freight_cost_usd
-FROM extracted_documents WHERE confirmed_by_user = 1
-UNION ALL
-SELECT 'Dataset average (Air / Nigeria)' AS source, AVG(freight_cost_usd)
-FROM shipments WHERE shipment_mode = 'Air' AND country = 'Nigeria' AND freight_cost_usd IS NOT NULL
-
-9. Prefer **UNION ALL** when returning parallel aggregates from two tables. Only JOIN `extracted_documents` to `extracted_line_items` (on document_id) — never JOIN `shipments` to `extracted_documents` on name/vendor fields.
-
-10. **ONLY** reference the three tables above (`shipments`, `extracted_documents`, `extracted_line_items`). Never JOIN or SELECT from any other table name — the database contains no other tables. If the question can be answered from a column that already exists (e.g. `shipments.country`), use that column directly; do not create a lookup or normalisation join to a table that is not listed here.
+3. Only add NULL filters when aggregating: add `freight_cost_usd IS NOT NULL` only when computing AVG/SUM on that column; add `weight_kg IS NOT NULL` only when computing AVG/SUM on weight. Never add NULL filters on date columns or on columns that are not being aggregated.
+4. SQLite date functions only — never use EXTRACT(), DATE_PART(), YEAR(), or MONTH(). Use strftime() exclusively: year → `strftime('%Y', col)`, month → `strftime('%m', col)`, year-month → `strftime('%Y-%m', col)`.
+5. When grouping by a nullable categorical column, wrap it in COALESCE(column, 'Unknown') so NULL groups are labelled.
+6. For "latest / most recent" document queries, use `ORDER BY extracted_at DESC LIMIT 1`. Do not use window functions (ROW_NUMBER, RANK) for this. When using a derived subquery, the outer SELECT may only reference aliases that the inner SELECT explicitly exposes.
+7. Limit result rows to 100 unless the user asks for all records.
+8. Use exact column names as listed above — do not invent column names.
+9. For linkage across sources, use `extracted_documents.destination_country` (not origin_country) to match against `shipments.country`.
+10. "A vs B" comparisons use UNION ALL with one row per group and a label column. Never use a scalar subquery in the SELECT list — it produces one aggregate value repeated across every source row, not one row per group.
+11. For cross-table comparisons (confirmed uploads vs historical shipments), use UNION ALL with a literal source label. Do not JOIN the two tables on name or vendor fields. For single-invoice comparisons, wrap the extracted_documents side in a subquery with ORDER BY extracted_at DESC LIMIT 1.
+12. Only JOIN extracted_documents to extracted_line_items (on document_id) — never JOIN shipments to extracted_documents on name/vendor fields.
+13. Only reference the three tables listed above. Never invent table names.

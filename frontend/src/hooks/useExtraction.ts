@@ -91,9 +91,15 @@ export function useExtraction(options: UseExtractionOptions = {}) {
           rateLimited: retry != null,
         });
       } else {
+        const base = getUserFacingErrorMessage(e, "Extraction failed");
+        const isTimeout =
+          base.toLowerCase().includes("timeout") ||
+          base.toLowerCase().includes("network");
         update({
           errorToast: {
-            message: getUserFacingErrorMessage(e, "Extraction failed"),
+            message: isTimeout
+              ? "Extraction timed out. The document may still have been processed — check Pending Invoices below."
+              : base,
             retryAfterSeconds: null,
           },
         });

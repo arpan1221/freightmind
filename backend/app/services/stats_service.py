@@ -191,9 +191,16 @@ _GROUP_BY_VENDOR_RE = re.compile(r"GROUP\s+BY\s+\S*vendor\b", re.IGNORECASE)
 # Columns that carry labels, not metrics
 _LABEL_COLS = frozenset(
     {
+        # categorical / label columns — never treated as the anomaly metric
         "country", "vendor", "shipment_mode", "mode", "product_group",
         "sub_classification", "brand", "managed_by", "fulfill_via",
         "vendor_inco_term", "first_line_designation", "project_code",
+        # identifier / key columns — integer IDs must never be mistaken for metrics
+        "id", "document_id", "extraction_id", "source",
+        # date/text columns that might appear in result sets
+        "invoice_number", "invoice_date", "delivery_date", "extracted_at",
+        "scheduled_delivery_date", "delivered_to_client_date",
+        "pq_number", "po_so_number", "asn_dn_number",
     }
 )
 

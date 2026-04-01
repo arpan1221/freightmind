@@ -179,8 +179,8 @@ class TestGenerateChartConfig:
 
     @pytest.mark.asyncio
     async def test_returns_none_for_invalid_type_value(self):
-        """type must be 'bar', 'line', or 'pie' — other values return None."""
-        client = self._make_client('{"type": "scatter", "x_key": "a", "y_key": "b"}')
+        """Unrecognised chart types return None."""
+        client = self._make_client('{"type": "radar", "x_key": "a", "y_key": "b"}')
         result = await _generate_chart_config(
             client,
             "Some question",

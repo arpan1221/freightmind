@@ -25,7 +25,7 @@ Watch the **Shipments** card in the dataset status grid at the top of the page.
 
 **What to point out:**
 - The green dot on the Shipments card **pulses** (animate-ping) — live seeding is active
-- Every 30 seconds, 42 new rows are inserted from the next scenario in rotation
+- Every 30 seconds, 1 randomly generated row is inserted (mode weighted to SCMS distribution: ~59% Air, ~27% Truck, ~6% Air Charter, ~4% Ocean)
 - The counter ticks up and the card briefly flashes green when new rows land
 - No page refresh needed — the frontend polls `/api/stats/live` every 5 seconds
 
@@ -51,11 +51,12 @@ Wait until the Shipments counter increments (up to 30 seconds). Then type:
 What are the top 5 destination countries by number of Air shipments?
 ```
 
-**Expected output:** Nigeria count has increased. If it crosses the IQR fence (~565), the answer now contains an anomaly note.
+**Expected output:** Shipment count has increased by 1. Over multiple cycles, country or mode counts shift gradually. If any country's or dimension's count crosses its IQR upper fence, the answer now contains an anomaly note.
 
 **What to point out:**
-- The answer changed without any manual intervention
+- The answer may change shape as counts accumulate — the agent reports whatever the data warrants
 - The system detected the change, updated its statistical model, and reported the anomaly
+- Anomaly detection is per-country — the agent computes each country's own distribution and flags deviations from it, not a global threshold
 - The data felt live — because it is
 
 ---
@@ -77,19 +78,25 @@ Show me the 5 most recently delivered shipments
 
 ---
 
-## Step 5 — Ocean cost spike emerges naturally (~varies)
+## Step 5 — Anomaly on a different dimension (~varies)
 
-After 2 seed cycles (60 s), the rotation reaches `ocean_cost_spike`. Type:
+After several seed cycles, ask about a specific mode or cost dimension:
 
 ```
 What is the average freight cost for Ocean shipments?
 ```
 
-**Expected output:** If the new average crosses the Ocean IQR fence (~$28,875), the answer includes a freight cost anomaly note.
+or
+
+```
+What are the top 5 destination countries by number of Air shipments?
+```
+
+**Expected output:** If accumulated rows shift any country or mode metric past its IQR upper fence, the answer includes an anomaly note on that dimension.
 
 **What to point out:**
-- No manual seeding was needed — the insight surfaced on its own
-- Different anomaly type (freight cost, not volume) fires on a different dimension
+- No manual seeding was needed — the insight surfaced on its own as rows accumulated
+- The agent computes each dimension's own baseline — different anomaly types (volume, cost) can fire independently
 - This is the system operating as an analytics agent that watches its own data
 
 ---

@@ -4,11 +4,15 @@ The database has TWO data sources you must consider answerable when the question
 
 1) **shipments** — Historical USAID/SCMS freight shipment rows (~10k+). Fields include:
    country, shipment_mode (Air, Ocean, Truck, Air Charter), product_group (ARV, HRDT, ANTM, ACT, MRDT),
-   vendor, delivery dates, freight_cost_usd, weight_kg, line_item_quantity, line_item_value, and related columns.
+   vendor, delivery dates, freight_cost_usd, weight_kg, line_item_quantity, line_item_value,
+   line_item_insurance_usd, pack_price, unit_price, and related columns.
 
 2) **extracted_documents** — User-uploaded freight invoices/documents that were **confirmed** by the user.
+   Fields include: shipment_mode, destination_country, carrier_vendor, total_freight_cost_usd,
+   total_weight_kg, total_insurance_usd, invoice_number, invoice_date, payment_terms, delivery_date.
    Use `confirmed_by_user = 1` when the user means “my uploads”, “invoices I added”, “confirmed extractions”, or counts of uploaded/confirmed documents.
    Questions that only ask about **confirmed** uploaded invoices, counts of extractions, or fields stored on `extracted_documents` are **answerable**, not out of scope.
+   Questions about insurance cost on an uploaded invoice are answerable via `total_insurance_usd`.
 
 Questions about carbon footprint, emissions, temperatures, product formulas, private customer names unrelated to the dataset,
 financial forecasts, or any topic clearly not represented in **shipments** or **extracted_documents** are out of scope.

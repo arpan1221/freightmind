@@ -54,12 +54,13 @@ Then type the same question again:
 What are the top 5 destination countries by number of Air shipments?
 ```
 
-**Expected output:** Nigeria at position 3 with 589. Answer includes an anomaly note — e.g.:
+**Expected output:** Nigeria moves up to position 3 with 589. The answer may include an anomaly note on one of the top countries — the agent flags whichever country's count deviates most from its own historical distribution, e.g.:
 
-> *"Nigeria's Air shipment count is statistically unusual — 4.1× the historical mean, above the typical ceiling of 565. This may reflect cold chain requirements or port congestion forcing modal shift."*
+> *"[Country]'s Air shipment count is statistically unusual — above the typical ceiling for that destination. This may reflect cold chain requirements or port congestion forcing modal shift."*
 
 **What to point out:**
 - Same question, different answer shape — the agent detected a change in the data
+- The agent determines which country is anomalous based on each country's own baseline, not a global threshold — it may not be Nigeria
 - The hypothesis is freight-domain specific, not a generic statistical comment
 - No alert was pre-configured — the system modelled its own distribution
 
@@ -106,7 +107,7 @@ Compare the freight cost from my confirmed invoice against the average freight c
 
 **What to point out:**
 - Expand **SQL ▶** — the query references **both** `shipments` and `extracted_documents`
-- The user's document is analytically comparable to 547 historical Air shipments to Nigeria
+- The user's document is analytically comparable to the historical Air shipments to Nigeria in the dataset
 - This is the A → B linkage: extraction and analytics share the same database
 
 ---

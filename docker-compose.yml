@@ -12,6 +12,7 @@ services:
     # Image runs as uid 1000; ensure host ./backend/cache is writable (e.g. mkdir -p backend/cache && chown -R 1000:1000 backend/cache)
     volumes:
       - ./backend/cache:/app/cache
+      - ./backend/freightmind.db:/app/freightmind.db
 
   frontend:
     build:

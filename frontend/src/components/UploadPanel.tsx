@@ -1,9 +1,11 @@
 "use client";
 
-import { useRef, DragEvent } from "react";
+import { useRef, DragEvent, useEffect, useState } from "react";
 import ConfidenceBadge from "@/components/ConfidenceBadge";
 import ErrorToast from "@/components/ErrorToast";
 import { useExtraction } from "@/hooks/useExtraction";
+import api from "@/lib/api";
+import type { ExtractionListResponse } from "@/types/api";
 
 const ACCEPTED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 const ACCEPTED_EXTENSIONS = ".pdf, .png, .jpg, .jpeg";
@@ -31,6 +33,39 @@ const FIELD_LABELS: Record<string, string> = {
 
 export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState<ExtractionListResponse["extractions"]>([]);
+
+  async function fetchPending() {
+    try {
+      const res = await api.get<ExtractionListResponse>("/api/documents/pending");
+      setPending(res.data.extractions ?? []);
+    } catch {
+      // non-critical
+    }
+  }
+
+  useEffect(() => {
+    fetchPending();
+  }, []);
+
+  async function confirmPending(id: number) {
+    try {
+      await api.post("/api/documents/confirm", { extraction_id: id });
+      await fetchPending();
+      onExtractSuccess?.();
+    } catch {
+      // surface nothing — user can retry
+    }
+  }
+
+  async function discardPending(id: number) {
+    try {
+      await api.delete(`/api/documents/extractions/${id}`);
+      await fetchPending();
+    } catch {
+      // surface nothing
+    }
+  }
   const {
     isExtracting,
     isConfirming,
@@ -369,8 +404,44 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
         )}
       </div>
 
-      {/* Placeholder — only shown when no toast (same panel) */}
-      {!errorToast && (
+      {/* Pending invoices — orphaned unconfirmed extractions */}
+      {pending.length > 0 && (
+        <div>
+          <h3 className="text-slate-700 font-medium text-sm mb-2">
+            Pending Invoices ({pending.length})
+          </h3>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden divide-y divide-amber-100">
+            {pending.map((doc) => (
+              <div key={doc.extraction_id} className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-700 truncate">{doc.filename}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {doc.shipment_mode ?? "—"} · {doc.destination_country ?? "—"}
+                    {doc.total_freight_cost_usd != null ? ` · $${doc.total_freight_cost_usd.toLocaleString()}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => discardPending(doc.extraction_id)}
+                    className="px-3 py-1 text-xs text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={() => confirmPending(doc.extraction_id)}
+                    className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Placeholder — only shown when no toast and no pending */}
+      {!errorToast && pending.length === 0 && (
         <div className="bg-white border border-slate-200 rounded-xl p-6 text-center">
           <p className="text-slate-400 text-sm">
             Extraction results will appear here after upload.

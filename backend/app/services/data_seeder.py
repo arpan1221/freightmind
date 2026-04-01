@@ -59,8 +59,8 @@ _INSERT_SQL = text("""
 
 
 def _rng() -> random.Random:
-    """Return a fresh seeded RNG so each call produces the same rows."""
-    return random.Random(42)
+    """Return an unseeded RNG for non-deterministic output each call."""
+    return random.Random()
 
 
 def _rand_date(rng: random.Random, start_year: int = 2025, end_year: int = 2026) -> str:
@@ -160,6 +160,65 @@ def _new_vendor_emergence(count: int = 25) -> list[dict]:
             "delivered_to_client_date": _rand_date(rng),
         })
     return rows
+
+
+_ALL_VENDORS = _AIR_VENDORS + _OCEAN_VENDORS + [
+    "Orion Pharma (Pty) Ltd",
+    "Cipla Quality Chemical Industries Limited",
+    "Hetero Labs Limited",
+    "FreightCo International",
+]
+
+_ALL_COUNTRIES = [
+    "Nigeria", "South Africa", "Côte d'Ivoire", "Uganda", "Zambia",
+    "Congo (DRC)", "Tanzania", "Mozambique", "Kenya", "Ethiopia",
+    "Zimbabwe", "Haiti", "Rwanda", "Vietnam", "Guyana", "Ghana",
+]
+
+_ALL_MODES = ["Air", "Ocean", "Truck", "Air Charter"]
+
+_MODE_WEIGHTS = [0.59, 0.04, 0.27, 0.06]  # approximate SCMS distribution
+
+_COST_RANGES = {
+    "Air":         (2_000, 25_000),
+    "Ocean":       (8_000, 50_000),
+    "Truck":       (500,   8_000),
+    "Air Charter": (15_000, 80_000),
+}
+
+_WEIGHT_RANGES = {
+    "Air":         (50,    800),
+    "Ocean":       (500,  10_000),
+    "Truck":       (100,   5_000),
+    "Air Charter": (200,   2_000),
+}
+
+
+def seed_random(db: Session) -> int:
+    """Insert one fully-randomised but statistically plausible shipment row."""
+    rng = _rng()
+    mode = rng.choices(_ALL_MODES, weights=_MODE_WEIGHTS, k=1)[0]
+    weight = round(rng.uniform(*_WEIGHT_RANGES[mode]), 1)
+    cost = round(rng.uniform(*_COST_RANGES[mode]), 2)
+    row = {
+        "project_code": "SCMS",
+        "country": rng.choice(_ALL_COUNTRIES),
+        "managed_by": rng.choice(["PMO - US", "SCMS"]),
+        "fulfill_via": rng.choice(["Direct Drop Shipment", "From RDC"]),
+        "shipment_mode": mode,
+        "vendor": rng.choice(_ALL_VENDORS),
+        "product_group": rng.choice(_PRODUCT_GROUPS),
+        "line_item_quantity": rng.randint(100, 20_000),
+        "line_item_value": round(rng.uniform(3_000, 150_000), 2),
+        "freight_cost_usd": cost,
+        "weight_kg": weight,
+        "line_item_insurance_usd": round(cost * rng.uniform(0.003, 0.008), 2),
+        "scheduled_delivery_date": _rand_date(rng),
+        "delivered_to_client_date": _rand_date(rng),
+    }
+    db.execute(_INSERT_SQL, row)
+    db.commit()
+    return 1
 
 
 # ---------------------------------------------------------------------------

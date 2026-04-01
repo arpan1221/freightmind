@@ -159,6 +159,55 @@ async def post_confirm(
     return ConfirmResponse(stored=True, document_id=doc.id)
 
 
+@router.delete("/extractions/{extraction_id}", status_code=204)
+async def delete_extraction(
+    extraction_id: int,
+    db: Session = Depends(get_db),
+) -> None:
+    """Discard an unconfirmed extraction. No-op if already confirmed or not found."""
+    doc = db.get(ExtractedDocument, extraction_id)
+    if doc is None or doc.confirmed_by_user == 1:
+        return
+    try:
+        db.delete(doc)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="internal_error")
+
+
+@router.get("/pending", response_model=ExtractionListResponse)
+async def get_pending(
+    db: Session = Depends(get_db),
+) -> ExtractionListResponse:
+    """Return unconfirmed extracted documents, newest first."""
+    try:
+        docs = (
+            db.query(ExtractedDocument)
+            .filter(ExtractedDocument.confirmed_by_user == 0)
+            .order_by(ExtractedDocument.id.desc())
+            .all()
+        )
+        return ExtractionListResponse(
+            extractions=[
+                ExtractedDocumentSummary(
+                    extraction_id=doc.id,
+                    filename=doc.source_filename,
+                    extracted_at=doc.extracted_at,
+                    invoice_number=doc.invoice_number,
+                    invoice_date=doc.invoice_date,
+                    shipment_mode=doc.shipment_mode,
+                    destination_country=doc.destination_country,
+                    total_freight_cost_usd=doc.total_freight_cost_usd,
+                )
+                for doc in docs
+            ]
+        )
+    except Exception as exc:
+        logger.error("Failed to list pending extractions: %s", exc)
+        raise HTTPException(status_code=500, detail="internal_error")
+
+
 @router.get("/extractions", response_model=ExtractionListResponse)
 async def get_extractions(
     db: Session = Depends(get_db),

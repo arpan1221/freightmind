@@ -25,28 +25,23 @@ logger = logging.getLogger(__name__)
 
 
 async def _live_seed_loop(interval: int) -> None:
-    """Background task: drip synthetic rows into shipments at a fixed interval.
+    """Background task: drip one random synthetic shipment row at a fixed interval.
 
-    Rotates through the three demo scenarios so each wake-up adds a different
-    type of data. After each insert, stats are refreshed so anomaly detection
-    reflects the new distribution immediately.
+    Each wake-up inserts a single fully-randomised row (mode, country, vendor,
+    cost, weight all drawn independently) so the counter increments by 1 each tick.
+    Stats are refreshed after each insert.
     """
-    from app.services.data_seeder import AVAILABLE_SCENARIOS, seed_scenario
+    from app.services.data_seeder import seed_random
     from app.services.stats_service import compute_and_store as _refresh
 
-    scenarios = list(AVAILABLE_SCENARIOS.keys())
-    idx = 0
-    logger.info("Live seeding enabled — interval %ds, scenarios: %s", interval, scenarios)
+    logger.info("Live seeding enabled — interval %ds, one random row per tick", interval)
     while True:
         await asyncio.sleep(interval)
-        scenario = scenarios[idx % len(scenarios)]
-        idx += 1
         try:
             db = SessionLocal()
             try:
-                inserted = seed_scenario(db, scenario)
+                seed_random(db)
                 _refresh(db)
-                logger.info("Live seed: %s — %d rows inserted", scenario, inserted)
             finally:
                 db.close()
         except Exception:
