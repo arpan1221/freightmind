@@ -2,6 +2,29 @@
 
 FreightMind is a proof-of-concept logistics analytics app: you ask natural-language questions over a historical SCMS shipment dataset and get SQL-backed answers with optional charts and transparent SQL; you can also upload freight invoices (PDF or images), review vision-extracted fields with per-field confidence, edit values, and confirm them into SQLite so the same chat interface can run **cross-table** questions that combine historical shipments with your confirmed extractions.
 
+## Development methodology — BMAD
+
+FreightMind was built using the **[BMAD framework](https://github.com/bmad-framework/bmad)** (Brains, Methods, Agents, Decisions) — a spec-driven development approach where every layer of the system is fully specified before a line of code is written. The process runs through a structured agent sequence:
+
+**Product Brief → PRD → Architecture → Epics & Stories → Implementation → Review**
+
+Each stage produces an artifact that the next stage builds on. Claude Code skills (`/bmad-agent-pm`, `/bmad-agent-architect`, `/bmad-agent-dev`, etc.) drive each stage interactively, maintaining full traceability from business requirement to deployed code.
+
+The full artifact trail for this project lives in `_bmad-output/`:
+
+| Artifact | Path |
+|----------|------|
+| Product brief | `_bmad-output/planning-artifacts/product-brief.md` |
+| PRD | `_bmad-output/planning-artifacts/prd.md` |
+| Architecture | `_bmad-output/planning-artifacts/architecture.md` |
+| Epics | `_bmad-output/planning-artifacts/epics.md` |
+| Implementation readiness report | `_bmad-output/planning-artifacts/implementation-readiness-report-2026-03-30.md` |
+| Story-level implementation specs | `_bmad-output/implementation-artifacts/` (one file per story) |
+
+Every feature in the codebase — from `ModelClient` caching to the Verifier's read-only SQL guard to the per-field confidence scoring — was driven by a story spec in `_bmad-output/implementation-artifacts/` before it was implemented. The statistical judgment layer and synthetic seeder were added through a dedicated brainstorming session (`_bmad-output/brainstorming/`) that applied first-principles and cross-pollination techniques to identify the highest-leverage engineering additions.
+
+---
+
 ## Architecture
 
 Both **analytics** and **document extraction** agents follow the same pipeline: **Planner → Executor → Verifier**, with all LLM calls going through **ModelClient** (caching, retry, fallback) to OpenRouter or Ollama. Only after verification does analytics SQL run against SQLite or extraction results persist via the API.
