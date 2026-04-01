@@ -33,11 +33,49 @@ flowchart TB
   API --> DB
 ```
 
-### Statistical judgment layer
+### Statistical judgment layer, self-calibrating baselines, and living data
 
-After each SQL execution the analytics agent reads a `_stats_cache` table of pre-computed IQR fences (p25 − 1.5×IQR … p75 + 1.5×IQR) for 11 shipment dimensions (count per country by mode, freight cost by mode, weight by mode, vendor count). If any result value crosses the upper fence the LLM answer prompt is enriched with the statistical context and instructed to add a concise anomaly note plus one freight-domain hypothesis. The system stays completely silent when results are unremarkable — no alert is pre-configured.
+Three capabilities were built on top of the core Planner → Executor → Verifier pipeline to demonstrate engineering depth beyond the baseline requirements. They form a virtuous cycle: the seeder adds plausible data → the baselines self-calibrate → the judgment layer has a statistically grounded foundation → responses become more meaningful.
 
-`_stats_cache` is refreshed at startup and after every demo seed operation, so baselines adapt to new data automatically.
+#### 1. Internal statistical foundation (`_stats_cache`)
+
+At startup the backend computes IQR-based statistics across **11 shipment dimensions** — shipment count per country by mode (Air / Ocean / Truck / all), freight cost by mode, weight by mode, and vendor shipment count — and stores them in a `_stats_cache` SQLite table. Each row holds `mean`, `stddev`, `p25`, `p75`, `iqr_fence_low`, and `iqr_fence_high` for its dimension.
+
+This is the agent's internal statistical dashboard: a live, queryable view of the distribution of every key metric across the entire dataset, always current, never stale because it is refreshed after every seed operation.
+
+| Dimension group | Count |
+|-----------------|-------|
+| Shipment count per country (all / Air / Ocean / Truck) | 4 |
+| Freight cost USD (all / Air / Ocean / Truck) | 4 |
+| Weight kg (all / Air) | 2 |
+| Shipment count per vendor | 1 |
+
+The IQR method (`p25 − 1.5×IQR` … `p75 + 1.5×IQR`) is used rather than z-scores because it is robust to outliers and adapts to any distribution shape without manual tuning.
+
+#### 2. Statistical judgment layer (anomaly detection)
+
+After each SQL execution, `detect_anomaly()` in `backend/app/services/stats_service.py` inspects the query and result set:
+
+1. **Dimension inference** — regex heuristics on the SQL (mode filter, GROUP BY country/vendor) and column names (freight/cost, weight, count) map the query to one of the 11 cached dimensions.
+2. **Fence check** — the maximum numeric value in the result is compared to `iqr_fence_high` for that dimension.
+3. **Selective voice** — if the value is within the fence the system stays completely silent. No alert, no annotation. Only genuine statistical outliers surface.
+4. **Enriched prompt** — when the fence is crossed, the LLM answer prompt is augmented with the observed value, typical IQR range, upper boundary, and ratio to the historical mean. The model is instructed to add **one concise anomaly note and one freight-domain hypothesis** (e.g. modal dependency, port congestion, supply chain pressure) — and explicitly not to add a follow-up question, since those are surfaced separately as suggestion chips.
+
+The result: the analytics agent holds an opinion about its own data and can distinguish a routine Nigeria Air count from a statistically anomalous one, without any pre-configured alert rules.
+
+#### 3. Synthetic data seeder (living dataset)
+
+Three pre-scripted seed scenarios insert plausible rows into the `shipments` table, designed to cross specific IQR fences after injection. Each uses a fixed random seed (`random.Random(42)`) for reproducibility.
+
+| Scenario | Rows | Target dimension | Effect |
+|----------|------|-----------------|--------|
+| `nigeria_air_surge` | 42 Air rows to Nigeria, 80–600 kg, $6k–$22k | `count_per_country_air` | Nigeria count crosses the Air IQR fence (~565) |
+| `ocean_cost_spike` | 35 Ocean rows, $24k–$48k | `freight_cost_usd_ocean` | Ocean average crosses the freight cost fence (~$28,875) |
+| `new_vendor_emergence` | 25 rows from "FreightCo International" | `count_per_vendor_all` | New vendor enters the top of the vendor landscape |
+
+Seeded rows use delivery dates in 2025–2026, making them distinguishable from the SCMS baseline (2006–2015) and fully queryable via the chat interface. After each seed the `_stats_cache` is refreshed so the judgment layer immediately operates on the updated distribution.
+
+In **live seeding mode** (`LIVE_SEEDING_INTERVAL_SECONDS > 0`) the backend runs an asyncio background task that rotates through scenarios automatically. The frontend polls `/api/stats/live` every 5 seconds and flashes the affected dashboard card when new rows land — anomalies surface without any manual intervention.
 
 ### UI ↔ API (high level)
 
