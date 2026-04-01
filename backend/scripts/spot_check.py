@@ -44,7 +44,7 @@ QUERIES: list[tuple[str, str, list[str]]] = [
     (
         "demo-01/monthly-2014-by-mode",
         "Show monthly shipment volume for 2014 broken down by shipment mode",
-        ["no_error", "has_rows", "sql_has:2014"],
+        ["no_error", "has_rows", "sql_has:2014"],  # 1,528 rows exist for 2014
     ),
     # ── demo-02: baseline counts ──────────────────────────────────
     (
@@ -57,6 +57,12 @@ QUERIES: list[tuple[str, str, list[str]]] = [
         "What is the average freight cost for Truck shipments?",
         ["no_error", "has_rows", "sql_has:Truck"],
     ),
+    # ── demo-03: Nigeria Air surge (pre-seed, baseline) ───────────
+    (
+        "demo-03/air-nigeria-freight-compare",
+        "Compare average freight cost for Air shipments to Nigeria vs all other Air destinations",
+        ["no_error", "has_rows", "sql_has:Nigeria", "sql_has:Air"],
+    ),
     # ── demo-04: ocean cost ───────────────────────────────────────
     (
         "demo-04/avg-freight-ocean",
@@ -68,16 +74,42 @@ QUERIES: list[tuple[str, str, list[str]]] = [
         "Compare average freight cost across all shipment modes",
         ["no_error", "has_rows", "sql_has:shipment_mode"],
     ),
+    (
+        "demo-04/top-10-expensive-ocean",
+        "Show the top 10 most expensive Ocean shipments by freight cost",
+        ["no_error", "has_rows", "sql_has:Ocean", "sql_has:freight_cost"],
+    ),
     # ── demo-05: vendors ──────────────────────────────────────────
     (
         "demo-05/top-10-vendors",
         "Who are the top 10 vendors by total shipment count?",
         ["no_error", "has_rows", "sql_has:vendor"],
     ),
-    # ── demo-08: cross-table (only if extracted_documents exist) ──
+    # ── demo-06: vision / extraction query ────────────────────────
+    (
+        "demo-06/last-confirmed-invoice",
+        "What shipment mode and freight cost were on my last confirmed invoice?",
+        ["no_error", "sql_has:extracted_documents", "sql_has:confirmed_by_user"],
+    ),
+    # ── demo-08: cross-table ──────────────────────────────────────
     (
         "demo-08/confirmed-invoices-count",
         "How many confirmed invoices do I have?",
+        ["no_error", "sql_has:extracted_documents", "sql_has:confirmed_by_user"],
+    ),
+    (
+        "demo-08/cross-table-freight-compare",
+        "Compare the freight cost from my confirmed invoice against the average freight cost for Air shipments to Nigeria in the dataset",
+        ["no_error", "sql_has:extracted_documents", "sql_has:shipments"],
+    ),
+    (
+        "demo-08/cross-table-insurance",
+        "How does the insurance cost on my confirmed invoice compare to the dataset average for Air shipments?",
+        ["no_error", "sql_has:extracted_documents"],
+    ),
+    (
+        "demo-08/invoices-above-avg",
+        "Which confirmed invoices have a freight cost above the dataset average for their shipment mode?",
         ["no_error", "sql_has:extracted_documents", "sql_has:confirmed_by_user"],
     ),
     # ── demo-09: guardrails ───────────────────────────────────────
@@ -89,12 +121,27 @@ QUERIES: list[tuple[str, str, list[str]]] = [
     (
         "demo-09/sql-injection-attempt",
         "Delete all shipments where the country is Nigeria",
-        ["no_error", "sql_lacks:DELETE", "sql_lacks:DROP"],
+        ["expect_blocked"],  # should be rejected by guardrail (400 unsafe_sql)
     ),
-    # ── table-selection rule: pure historical question should NOT hit extracted ──
+    (
+        "demo-09/list-confirmed-invoices",
+        "List all my confirmed invoices and their freight costs",
+        ["no_error", "sql_has:extracted_documents", "sql_has:confirmed_by_user"],
+    ),
+    # ── table-selection rule: pure historical should NOT hit extracted ──
     (
         "table-selection/historical-only",
         "What is the total freight cost for all Air shipments to Nigeria?",
+        ["no_error", "has_rows", "sql_lacks:extracted_documents"],
+    ),
+    (
+        "table-selection/historical-weight",
+        "What is the average weight in kg for Ocean shipments?",
+        ["no_error", "has_rows", "sql_lacks:extracted_documents"],
+    ),
+    (
+        "table-selection/historical-country-breakdown",
+        "Show shipment count by country for the top 10 countries",
         ["no_error", "has_rows", "sql_lacks:extracted_documents"],
     ),
 ]
@@ -154,6 +201,19 @@ def run_query(base_url: str, label: str, question: str, assertions: list[str]) -
     try:
         resp = requests.post(url, json=payload, timeout=120)
         duration = time.monotonic() - t0
+
+        # Special case: expect_blocked means a 400 unsafe_sql is the DESIRED outcome
+        if "expect_blocked" in assertions:
+            if resp.status_code == 400 and "unsafe_sql" in resp.text:
+                return Result(
+                    label=label, passed=True, failures=[], duration_s=duration,
+                    error=f"(correctly blocked) {resp.text[:200]}",
+                )
+            return Result(
+                label=label, passed=False,
+                failures=[f"expected 400 unsafe_sql, got HTTP {resp.status_code}"],
+                duration_s=duration, error=resp.text[:300],
+            )
 
         if resp.status_code != 200:
             return Result(

@@ -20,6 +20,13 @@ You are an analytics assistant for FreightMind. The SQLite database has two main
    total_weight_kg, total_freight_cost_usd, total_insurance_usd, payment_terms,
    delivery_date, extraction_confidence, extracted_at, confirmed_by_user.
    Always filter with confirmed_by_user = 1 unless the user explicitly asks about unconfirmed/pending rows.
+   **CRITICAL column-name differences from shipments:**
+   - Freight cost: `total_freight_cost_usd` (NOT `freight_cost_usd`)
+   - Weight: `total_weight_kg` (NOT `weight_kg`)
+   - Insurance: `total_insurance_usd` (NOT `line_item_insurance_usd`)
+   - Country: `destination_country` (NOT `country`)
+   - Vendor: `carrier_vendor` (NOT `vendor`)
+   Never use shipments column names when querying extracted_documents.
 
    Optional detail table: **extracted_line_items** — line-level rows for each document.
    Columns: id, document_id, description, quantity, unit_price, total_price, confidence.

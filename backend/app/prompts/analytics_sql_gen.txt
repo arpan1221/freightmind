@@ -28,10 +28,13 @@ shipment_mode TEXT, carrier_vendor TEXT, total_weight_kg REAL, total_freight_cos
 total_insurance_usd REAL, payment_terms TEXT, delivery_date TEXT,
 extraction_confidence REAL, extracted_at TEXT, confirmed_by_user INTEGER
 
-Column name differences between tables — use the exact name for each table or queries will fail:
-- Freight cost: `shipments.freight_cost_usd` vs `extracted_documents.total_freight_cost_usd`
-- Weight: `shipments.weight_kg` vs `extracted_documents.total_weight_kg`
-- Insurance: `shipments.line_item_insurance_usd` vs `extracted_documents.total_insurance_usd`
+**CRITICAL — column names differ between tables. Using the wrong name will cause a runtime error:**
+- Freight cost: `shipments.freight_cost_usd` → `extracted_documents.total_freight_cost_usd`
+- Weight: `shipments.weight_kg` → `extracted_documents.total_weight_kg`
+- Insurance: `shipments.line_item_insurance_usd` → `extracted_documents.total_insurance_usd`
+- Country: `shipments.country` → `extracted_documents.destination_country`
+- Vendor: `shipments.vendor` → `extracted_documents.carrier_vendor`
+Do NOT use `freight_cost_usd`, `weight_kg`, `line_item_insurance_usd`, `country`, or `vendor` on `extracted_documents` — those columns do not exist there.
 
 When the user asks about **their** uploaded/confirmed invoice data, use **confirmed_by_user = 1**.
 For pending-only review rows (not yet confirmed), use **confirmed_by_user = 0** only if they explicitly ask for unconfirmed/pending uploads.
@@ -58,7 +61,7 @@ Rules:
 1. Output ONLY the raw SQL — no markdown, no code fences, no explanation
 2. Use only read-only SELECT (including UNION ALL / subqueries) — never DROP, DELETE, UPDATE, INSERT, ALTER, CREATE, REPLACE, ATTACH, PRAGMA, EXEC
 3. Only add NULL filters when aggregating: add `freight_cost_usd IS NOT NULL` only when computing AVG/SUM on that column; add `weight_kg IS NOT NULL` only when computing AVG/SUM on weight. Never add NULL filters on date columns or on columns that are not being aggregated.
-4. SQLite date functions only — never use EXTRACT(), DATE_PART(), YEAR(), or MONTH(). Use strftime() exclusively: year → `strftime('%Y', col)`, month → `strftime('%m', col)`, year-month → `strftime('%Y-%m', col)`.
+4. SQLite date functions only — never use EXTRACT(), DATE_PART(), YEAR(), or MONTH(). Use strftime() exclusively: year → `strftime('%Y', col)`, month → `strftime('%m', col)`, year-month → `strftime('%Y-%m', col)`. strftime returns TEXT, so always compare against a string literal: `strftime('%Y', col) = '2014'` (NOT `= 2014`).
 5. When grouping by a nullable categorical column, wrap it in COALESCE(column, 'Unknown') so NULL groups are labelled.
 6. For "latest / most recent" document queries, use `ORDER BY extracted_at DESC LIMIT 1`. Do not use window functions (ROW_NUMBER, RANK) for this. When using a derived subquery, the outer SELECT may only reference aliases that the inner SELECT explicitly exposes.
 7. Limit result rows to 100 unless the user asks for all records.
