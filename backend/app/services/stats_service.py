@@ -321,9 +321,9 @@ def detect_anomaly(
         f"  • Typical range (IQR): {typical}\n"
         f"  • Upper boundary: {fence_high:,.0f}\n"
         f"  • This value is {ratio:.1f}× the historical mean ({mean:,.0f})\n\n"
-        f"When presenting your answer, briefly note this statistical anomaly (1–2 sentences). "
-        f"Offer one specific freight-logistics hypothesis that might explain it "
+        f"When presenting your answer, add 1–2 sentences noting this statistical anomaly "
+        f"and one specific freight-logistics hypothesis that might explain it "
         f"(e.g. modal dependency, supply chain pressure, policy shift). "
-        f"End with a single follow-up question the user might want to investigate. "
-        f"Keep the anomaly note concise — do not let it overshadow the main answer."
+        f"Do not add a follow-up question — those are surfaced separately as suggestion chips. "
+        f"Keep the anomaly note concise and do not let it overshadow the main answer."
     )
