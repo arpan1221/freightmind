@@ -22,9 +22,22 @@ class ExtractedDocument(Base):
     total_insurance_usd = Column(Float)
     payment_terms = Column(Text)
     delivery_date = Column(Text)
+    hs_code = Column(Text)
+    port_of_loading = Column(Text)
+    port_of_discharge = Column(Text)
+    incoterms = Column(Text)
+    description_of_goods = Column(Text)
     extraction_confidence = Column(Float)
     extracted_at = Column(Text, server_default=text("(datetime('now'))"))
     confirmed_by_user = Column(Integer, default=0, server_default="0")
+    # Multi-document support: commercial_invoice | bill_of_lading | packing_list
+    document_type = Column(Text, nullable=False, server_default="commercial_invoice")
+    # Bill of Lading specific fields
+    bl_number = Column(Text)
+    vessel_name = Column(Text)
+    container_numbers = Column(Text)
+    # Packing List specific fields
+    package_count = Column(Integer)
 
     line_items = relationship(
         "ExtractedLineItem",

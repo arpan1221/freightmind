@@ -26,6 +26,7 @@ Columns: id INTEGER, source_filename TEXT, invoice_number TEXT, invoice_date TEX
 shipper_name TEXT, consignee_name TEXT, origin_country TEXT, destination_country TEXT,
 shipment_mode TEXT, carrier_vendor TEXT, total_weight_kg REAL, total_freight_cost_usd REAL,
 total_insurance_usd REAL, payment_terms TEXT, delivery_date TEXT,
+hs_code TEXT, port_of_loading TEXT, port_of_discharge TEXT, incoterms TEXT, description_of_goods TEXT,
 extraction_confidence REAL, extracted_at TEXT, confirmed_by_user INTEGER
 
 **CRITICAL — column names differ between tables. Using the wrong name will cause a runtime error:**
@@ -54,6 +55,22 @@ unit_price REAL, total_price REAL, confidence REAL
 Foreign key: document_id → extracted_documents.id
 
 Join extracted_line_items to extracted_documents ON document_id when the question needs line-item detail. Prefer confirmed_by_user = 1 unless otherwise specified.
+
+---
+
+---
+
+Table: **verification_results**
+Columns: id INTEGER, shipment_id TEXT, received_at TEXT, customer_id TEXT, customer_name TEXT,
+overall_status TEXT, draft_reply TEXT, error_message TEXT, created_at TEXT
+overall_status values: 'approved', 'amendment_required', 'uncertain', 'failed'
+
+Table: **verification_fields**
+Columns: id INTEGER, verification_id INTEGER, name TEXT, extracted TEXT, expected TEXT,
+status TEXT, confidence REAL, rule_description TEXT
+status values: 'match', 'mismatch', 'uncertain', 'no_rule'
+Foreign key: verification_id → verification_results.id
+Use this table to answer questions about which fields fail most often, mismatch rates, confidence patterns.
 
 ---
 

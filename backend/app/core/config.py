@@ -18,15 +18,18 @@ class Settings(BaseSettings):
     # Inference provider per agent: "openrouter" | "ollama"
     analytics_provider: Literal["openrouter", "ollama"] = "ollama"
     vision_provider: Literal["openrouter", "ollama"] = "openrouter"
-    # Ollama base URL — use host.docker.internal when calling from inside a Docker container.
+    # Ollama base URL — defaults to host.docker.internal for Docker deployments.
+    # Override with OLLAMA_BASE_URL=http://localhost:11434/v1 when running the backend directly on the host.
     ollama_base_url: str = "http://host.docker.internal:11434/v1"
-    analytics_model: str = "llama3.2:3b"
+    analytics_model: str = "llama3.1:8b"
     # Fallback when primary text model fails after retries (Story 5.5, TECH_DECISIONS TD-2).
-    analytics_model_fallback: str = "llama3.2:3b"
+    analytics_model_fallback: str = "llama3.1:8b"
     vision_model: str = "nvidia/nemotron-nano-12b-v2-vl:free"
     # Fallback when primary vision model fails after retries (Story 5.5, TECH_DECISIONS TD-3).
     vision_model_fallback: str = "qwen/qwen2.5-vl-7b-instruct:free"
-    vision_timeout: float = 120.0
+    # Timeout for analytics (text) LLM calls. Local Ollama models can be slow — 60s default.
+    analytics_timeout: float = 60.0
+    vision_timeout: float = 300.0
     # Passed to OpenRouter as max_tokens on every chat completion. High defaults (e.g. model
     # max) can trigger 402 on low-credit accounts; keep this within typical output needs.
     llm_max_tokens: int = 2048

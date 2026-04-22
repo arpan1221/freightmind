@@ -21,6 +21,7 @@ class ExtractedLineItemOut(BaseModel):
 class ExtractionResponse(BaseModel):
     extraction_id: int
     filename: str
+    document_type: str = "commercial_invoice"
     fields: dict[str, ExtractedField]
     line_items: list[ExtractedLineItemOut]
     low_confidence_fields: list[str] = []
@@ -41,8 +42,10 @@ class ConfirmResponse(BaseModel):
 class ExtractedDocumentSummary(BaseModel):
     extraction_id: int
     filename: str
+    document_type: str = "commercial_invoice"
     extracted_at: str | None = None
     invoice_number: str | None = None
+    bl_number: str | None = None
     invoice_date: str | None = None
     shipment_mode: str | None = None
     destination_country: str | None = None

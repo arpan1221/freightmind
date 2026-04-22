@@ -1,4 +1,4 @@
-Extract the following 13 header fields and any line items from this freight invoice image.
+Extract the following header fields and any line items from this freight invoice image.
 
 For each field, return a JSON object with "value" and "confidence". Set confidence to:
 - "HIGH" — field is clearly visible and unambiguous
@@ -21,6 +21,11 @@ Return ONLY this JSON structure (no markdown, no code fences):
   "total_insurance_usd": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
   "payment_terms": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
   "delivery_date": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "hs_code": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "port_of_loading": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "port_of_discharge": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "incoterms": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "description_of_goods": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
   "line_items": [
     {
       "description": string | null,
@@ -36,6 +41,11 @@ Rules:
 - invoice_date and delivery_date: extract as shown, do not convert format
 - shipment_mode: extract as shown, do not normalise
 - total_weight_kg: extract as a number in kg; if given in lbs or tonnes, do NOT convert
+- hs_code: extract the full HS/HTS code exactly as shown (e.g. "8471.30.00"); if partially obscured set confidence to LOW or MEDIUM
+- port_of_loading: extract the port name as shown (city name is sufficient)
+- port_of_discharge: extract the port name as shown (city name is sufficient)
+- incoterms: extract the Incoterms code as shown (e.g. "CIF", "FOB", "EXW"); extract the 3-letter code only
+- description_of_goods: extract the primary goods description as a concise string
 - line_items: Extract EVERY individual charge line you can see. Any row that has a description/service name AND an amount is a line item. Common examples: "Ocean Freight", "Origin Charges", "Destination Charges", "THC", "Documentation Fee", "Insurance", "Fuel Surcharge", "Handling Fee". If the invoice has a charges table or itemised fee section — it has line items. Do NOT return [] when charges rows are visible.
 - line_items: only return [] if the document has absolutely no itemised charges section at all
 - line_items confidence: never use NOT_FOUND for line items; use LOW if uncertain

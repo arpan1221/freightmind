@@ -5,6 +5,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 COPY app/ ./app/
 COPY data/ ./data/
+COPY config/ ./config/
+COPY scripts/ ./scripts/
 RUN useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser

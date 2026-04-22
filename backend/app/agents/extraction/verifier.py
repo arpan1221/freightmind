@@ -22,9 +22,15 @@ _HEADER_FIELDS = [
     "total_insurance_usd",
     "payment_terms",
     "delivery_date",
+    # Part 2: trade document fields added to extraction
+    "hs_code",
+    "port_of_loading",
+    "port_of_discharge",
+    "incoterms",
+    "description_of_goods",
 ]
 
-_NUMERIC_FIELDS = {"total_weight_kg", "total_freight_cost_usd", "total_insurance_usd"}
+_NUMERIC_FIELDS = {"total_weight_kg", "total_freight_cost_usd", "total_insurance_usd", "package_count"}
 
 _ALLOWED_CORRECTION_FIELDS = {
     "invoice_number",
@@ -40,6 +46,17 @@ _ALLOWED_CORRECTION_FIELDS = {
     "total_insurance_usd",
     "payment_terms",
     "delivery_date",
+    "hs_code",
+    "port_of_loading",
+    "port_of_discharge",
+    "incoterms",
+    "description_of_goods",
+    # Bill of Lading fields
+    "bl_number",
+    "vessel_name",
+    "container_numbers",
+    # Packing List fields
+    "package_count",
 }
 
 _VALID_SHIPMENT_MODES = {"Air", "Ocean", "Truck", "Air Charter"}

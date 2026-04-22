@@ -1,0 +1,43 @@
+Extract the following fields from this Packing List image.
+
+For each field, return a JSON object with "value" and "confidence". Set confidence to:
+- "HIGH" — field is clearly visible and unambiguous
+- "MEDIUM" — field is present but partially obscured, truncated, or inferred
+- "LOW" — field is very hard to read, guessed, or uncertain
+- "NOT_FOUND" — field is absent from the document; set value to null
+
+Return ONLY this JSON structure (no markdown, no code fences):
+{
+  "invoice_number": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "invoice_date": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "shipper_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "consignee_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "origin_country": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "destination_country": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "port_of_loading": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "port_of_discharge": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "total_weight_kg": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "package_count": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "description_of_goods": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "delivery_date": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "hs_code": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "line_items": [
+    {
+      "description": string | null,
+      "quantity": number | null,
+      "unit_price": null,
+      "total_price": null,
+      "confidence": "HIGH" | "MEDIUM" | "LOW"
+    }
+  ]
+}
+
+Rules:
+- invoice_number: reference invoice or packing list number; look for "PL No.", "Packing List No.", "Invoice No.", "Reference"
+- invoice_date: date of the packing list; extract as shown, do not convert format
+- package_count: TOTAL number of packages, cartons, boxes, or pallets in the shipment (the grand total, not per-line)
+- total_weight_kg: gross weight total across all packages in kg; do NOT convert if given in other units
+- delivery_date: shipment date or required delivery date; extract as shown
+- hs_code: HS/HTS code for the goods; extract the full code (e.g. "8471.30.00")
+- line_items: each row in the packing list table — description + quantity per line; unit_price and total_price are always null for packing lists
+- line_items: return [] only if there is absolutely no itemised row table

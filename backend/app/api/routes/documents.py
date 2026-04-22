@@ -1,9 +1,9 @@
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
-from app.agents.extraction.executor import ExtractionExecutor
+from app.agents.extraction.executor import ExtractionExecutor, DOCUMENT_TYPES
 from app.agents.extraction.planner import ExtractionPlanner, SUPPORTED_TYPES
 from app.agents.extraction.verifier import ExtractionVerifier
 from app.core.config import settings
@@ -26,14 +26,30 @@ logger = logging.getLogger(__name__)
 @router.post("/extract", response_model=ExtractionResponse)
 async def post_extract(
     file: UploadFile = File(...),
+    document_type: str | None = Form(None),
     db: Session = Depends(get_db),
 ) -> ExtractionResponse:
+    """Extract fields from a freight document.
+
+    Accepts an optional ``document_type`` form field:
+    ``commercial_invoice`` | ``bill_of_lading`` | ``packing_list``.
+    When omitted the vision model auto-detects the document type.
+    """
     if file.content_type not in SUPPORTED_TYPES:
         raise HTTPException(
             status_code=415,
             detail=(
                 f"Unsupported media type '{file.content_type}'. "
                 "Accepted types: PDF, PNG, JPEG."
+            ),
+        )
+
+    if document_type is not None and document_type not in DOCUMENT_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Invalid document_type '{document_type}'. "
+                f"Accepted: {', '.join(DOCUMENT_TYPES)}."
             ),
         )
 
@@ -59,7 +75,13 @@ async def post_extract(
 
         client = ModelClient.for_vision(timeout=settings.vision_timeout)
         executor = ExtractionExecutor(client)
-        raw = await executor.extract(image_bytes, mime_type)
+
+        # Auto-detect document type when not specified by caller
+        resolved_type = document_type
+        if resolved_type is None:
+            resolved_type = await executor.detect_document_type(image_bytes, mime_type)
+
+        raw = await executor.extract(image_bytes, mime_type, document_type=resolved_type)
 
         verifier = ExtractionVerifier()
         raw_line_items = raw.get("line_items") or []
@@ -70,23 +92,41 @@ async def post_extract(
         present = sum(1 for f in fields.values() if f.value is not None)
         agg_confidence = present / len(fields) if fields else 0.0
 
+        def _fv(name: str):
+            """Safely get field value — returns None if field not present."""
+            return fields[name].value if name in fields else None
+
         doc = ExtractedDocument(
             source_filename=file.filename or "",
             confirmed_by_user=0,
             extraction_confidence=agg_confidence,
-            invoice_number=fields["invoice_number"].value,
-            invoice_date=fields["invoice_date"].value,
-            shipper_name=fields["shipper_name"].value,
-            consignee_name=fields["consignee_name"].value,
-            origin_country=fields["origin_country"].value,
-            destination_country=fields["destination_country"].value,
-            shipment_mode=fields["shipment_mode"].value,
-            carrier_vendor=fields["carrier_vendor"].value,
-            total_weight_kg=fields["total_weight_kg"].value,
-            total_freight_cost_usd=fields["total_freight_cost_usd"].value,
-            total_insurance_usd=fields["total_insurance_usd"].value,
-            payment_terms=fields["payment_terms"].value,
-            delivery_date=fields["delivery_date"].value,
+            document_type=resolved_type,
+            # Commercial Invoice fields
+            invoice_number=_fv("invoice_number"),
+            invoice_date=_fv("invoice_date"),
+            payment_terms=_fv("payment_terms"),
+            total_freight_cost_usd=_fv("total_freight_cost_usd"),
+            total_insurance_usd=_fv("total_insurance_usd"),
+            # Shared fields (present across doc types)
+            shipper_name=_fv("shipper_name"),
+            consignee_name=_fv("consignee_name"),
+            origin_country=_fv("origin_country"),
+            destination_country=_fv("destination_country"),
+            shipment_mode=_fv("shipment_mode"),
+            carrier_vendor=_fv("carrier_vendor"),
+            total_weight_kg=_fv("total_weight_kg"),
+            delivery_date=_fv("delivery_date"),
+            hs_code=_fv("hs_code"),
+            port_of_loading=_fv("port_of_loading"),
+            port_of_discharge=_fv("port_of_discharge"),
+            incoterms=_fv("incoterms"),
+            description_of_goods=_fv("description_of_goods"),
+            # Bill of Lading specific
+            bl_number=_fv("bl_number"),
+            vessel_name=_fv("vessel_name"),
+            container_numbers=_fv("container_numbers"),
+            # Packing List specific
+            package_count=int(_fv("package_count")) if _fv("package_count") is not None else None,
         )
         db.add(doc)
         db.flush()
@@ -109,6 +149,7 @@ async def post_extract(
         return ExtractionResponse(
             extraction_id=doc.id,
             filename=file.filename or "",
+            document_type=resolved_type,
             fields=fields,
             line_items=line_items,
             low_confidence_fields=low_confidence_fields,
@@ -189,19 +230,7 @@ async def get_pending(
             .all()
         )
         return ExtractionListResponse(
-            extractions=[
-                ExtractedDocumentSummary(
-                    extraction_id=doc.id,
-                    filename=doc.source_filename,
-                    extracted_at=doc.extracted_at,
-                    invoice_number=doc.invoice_number,
-                    invoice_date=doc.invoice_date,
-                    shipment_mode=doc.shipment_mode,
-                    destination_country=doc.destination_country,
-                    total_freight_cost_usd=doc.total_freight_cost_usd,
-                )
-                for doc in docs
-            ]
+            extractions=[_doc_to_summary(doc) for doc in docs]
         )
     except Exception as exc:
         logger.error("Failed to list pending extractions: %s", exc)
@@ -225,20 +254,23 @@ async def get_extractions(
             .all()
         )
         return ExtractionListResponse(
-            extractions=[
-                ExtractedDocumentSummary(
-                    extraction_id=doc.id,
-                    filename=doc.source_filename,
-                    extracted_at=doc.extracted_at,
-                    invoice_number=doc.invoice_number,
-                    invoice_date=doc.invoice_date,
-                    shipment_mode=doc.shipment_mode,
-                    destination_country=doc.destination_country,
-                    total_freight_cost_usd=doc.total_freight_cost_usd,
-                )
-                for doc in docs
-            ]
+            extractions=[_doc_to_summary(doc) for doc in docs]
         )
     except Exception as exc:
         logger.error("Failed to list extractions: %s", exc)
         raise HTTPException(status_code=500, detail="internal_error")
+
+
+def _doc_to_summary(doc: ExtractedDocument) -> ExtractedDocumentSummary:
+    return ExtractedDocumentSummary(
+        extraction_id=doc.id,
+        filename=doc.source_filename,
+        document_type=getattr(doc, "document_type", "commercial_invoice") or "commercial_invoice",
+        extracted_at=doc.extracted_at,
+        invoice_number=doc.invoice_number,
+        bl_number=getattr(doc, "bl_number", None),
+        invoice_date=doc.invoice_date,
+        shipment_mode=doc.shipment_mode,
+        destination_country=doc.destination_country,
+        total_freight_cost_usd=doc.total_freight_cost_usd,
+    )

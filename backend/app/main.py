@@ -2,6 +2,8 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,12 +18,51 @@ from app.core.database import SessionLocal, init_db
 import app.models.shipment  # noqa: F401
 import app.models.extracted_document  # noqa: F401
 import app.models.extracted_line_item  # noqa: F401
+import app.models.verification_result  # noqa: F401
 from app.schemas.common import ErrorResponse
-from app.api.routes import analytics, documents, extraction, system
+from app.api.routes import analytics, documents, extraction, system, verification
 from app.api.routes import demo as demo_routes
 from app.services.stats_service import compute_and_store, create_stats_table
 
 logger = logging.getLogger(__name__)
+
+
+async def _warm_up_ollama_model() -> None:
+    """Pre-load the analytics model into Ollama memory on startup.
+
+    Ollama evicts models after 5 minutes of inactivity by default. Sending
+    keep_alive=-1 on startup keeps the model resident indefinitely, so the
+    first user request (SQL generation, draft email) doesn't pay a cold-start
+    penalty of 10-30 seconds.
+
+    Uses the native /api/generate endpoint with an empty prompt — the standard
+    Ollama pattern for pre-loading without generating output.
+
+    Non-fatal: if Ollama isn't reachable yet (e.g. Docker networking still
+    initialising), we log a warning and continue. The model will load on the
+    first real request instead.
+    """
+    base = settings.ollama_base_url.rstrip("/").removesuffix("/v1")
+    url = f"{base}/api/generate"
+    payload = {
+        "model": settings.analytics_model,
+        "prompt": "",
+        "keep_alive": -1,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+        logger.info(
+            "Ollama model '%s' pre-loaded with keep_alive=-1 (resident until server restart)",
+            settings.analytics_model,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Ollama warm-up skipped for model '%s' — first request will trigger load: %s",
+            settings.analytics_model,
+            exc,
+        )
 
 
 async def _live_seed_loop(interval: int) -> None:
@@ -65,6 +106,9 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("Startup sequence failed: %s", exc)
         raise
+
+    if settings.analytics_provider == "ollama":
+        await _warm_up_ollama_model()
 
     task = None
     if settings.live_seeding_interval_seconds > 0:
@@ -161,3 +205,4 @@ app.include_router(analytics.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(extraction.router, prefix="/api")
 app.include_router(demo_routes.router, prefix="/api")
+app.include_router(verification.router, prefix="/api")

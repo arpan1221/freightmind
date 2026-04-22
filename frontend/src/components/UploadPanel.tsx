@@ -16,8 +16,17 @@ interface UploadPanelProps {
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  // Commercial Invoice
   invoice_number: "Invoice Number",
   invoice_date: "Invoice Date",
+  payment_terms: "Payment Terms",
+  total_freight_cost_usd: "Freight Cost (USD)",
+  total_insurance_usd: "Insurance (USD)",
+  // Bill of Lading
+  bl_number: "B/L Number",
+  vessel_name: "Vessel / Flight",
+  container_numbers: "Container Numbers",
+  // Shared
   shipper_name: "Shipper",
   consignee_name: "Consignee",
   origin_country: "Origin Country",
@@ -25,10 +34,26 @@ const FIELD_LABELS: Record<string, string> = {
   shipment_mode: "Shipment Mode",
   carrier_vendor: "Carrier / Vendor",
   total_weight_kg: "Weight (kg)",
-  total_freight_cost_usd: "Freight Cost (USD)",
-  total_insurance_usd: "Insurance (USD)",
-  payment_terms: "Payment Terms",
   delivery_date: "Delivery Date",
+  port_of_loading: "Port of Loading",
+  port_of_discharge: "Port of Discharge",
+  incoterms: "Incoterms",
+  hs_code: "HS Code",
+  description_of_goods: "Description of Goods",
+  // Packing List
+  package_count: "Package Count",
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  commercial_invoice: "Commercial Invoice",
+  bill_of_lading: "Bill of Lading",
+  packing_list: "Packing List",
+};
+
+const DOC_TYPE_COLORS: Record<string, string> = {
+  commercial_invoice: "bg-blue-50 text-blue-700 border-blue-200",
+  bill_of_lading: "bg-violet-50 text-violet-700 border-violet-200",
+  packing_list: "bg-teal-50 text-teal-700 border-teal-200",
 };
 
 export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
@@ -140,7 +165,7 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
       <div className="flex flex-col gap-6">
         <div>
           <h2 className="text-slate-900 font-semibold text-base">
-            Upload Freight Invoice
+            Upload Freight Document
           </h2>
         </div>
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center">
@@ -161,13 +186,13 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
             Extraction saved successfully
           </p>
           <p className="text-emerald-600 text-xs mt-1">
-            The invoice data has been added to the dataset.
+            The document data has been added to the dataset.
           </p>
           <button
             onClick={handleReset}
             className="mt-4 text-xs text-slate-500 underline hover:text-slate-700"
           >
-            Upload another invoice
+            Upload another document
           </button>
         </div>
       </div>
@@ -178,13 +203,21 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
 
   // ── Review state ─────────────────────────────────────────────────────────
   if (extraction) {
+    const docType = extraction.document_type ?? "commercial_invoice";
+    const docTypeLabel = DOC_TYPE_LABELS[docType] ?? docType;
+    const docTypeBadgeClass = DOC_TYPE_COLORS[docType] ?? "bg-slate-50 text-slate-700 border-slate-200";
     return (
       <>
       <div className="flex flex-col gap-6">
         <div>
-          <h2 className="text-slate-900 font-semibold text-base">
-            Review Extraction
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-slate-900 font-semibold text-base">
+              Review Extraction
+            </h2>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${docTypeBadgeClass}`}>
+              {docTypeLabel}
+            </span>
+          </div>
           <p className="text-slate-500 text-sm mt-0.5">
             {extraction.filename} — verify fields before saving
           </p>
@@ -326,11 +359,11 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-slate-900 font-semibold text-base">
-          Upload Freight Invoice
+          Upload Freight Document
         </h2>
         <p className="text-slate-500 text-sm mt-0.5">
-          Drop a PDF or image of a carrier invoice. FreightMind will extract all
-          fields for your review before storing.
+          Drop a PDF or image — Commercial Invoice, Bill of Lading, or Packing List.
+          FreightMind auto-detects the document type and extracts all fields for review.
         </p>
       </div>
 
@@ -394,7 +427,7 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
               <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
             </svg>
             <p className="text-slate-700 font-medium text-sm">
-              Drop a freight invoice here
+              Drop a freight document here
             </p>
             <p className="text-slate-400 text-sm mt-1">or click to browse</p>
             <p className="text-slate-300 text-xs mt-3 font-medium tracking-wide uppercase">
@@ -411,12 +444,20 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
             Pending Invoices ({pending.length})
           </h3>
           <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden divide-y divide-amber-100">
-            {pending.map((doc) => (
+            {pending.map((doc) => {
+              const dt = doc.document_type ?? "commercial_invoice";
+              const dtLabel = DOC_TYPE_LABELS[dt] ?? dt;
+              const dtBadge = DOC_TYPE_COLORS[dt] ?? "bg-slate-50 text-slate-700 border-slate-200";
+              const ref = doc.bl_number ?? doc.invoice_number;
+              return (
               <div key={doc.extraction_id} className="px-4 py-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-700 truncate">{doc.filename}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-slate-700 truncate">{doc.filename}</p>
+                    <span className={`shrink-0 text-xs font-medium px-1.5 py-0.5 rounded border ${dtBadge}`}>{dtLabel}</span>
+                  </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {doc.shipment_mode ?? "—"} · {doc.destination_country ?? "—"}
+                    {ref ? `${ref} · ` : ""}{doc.shipment_mode ?? "—"} · {doc.destination_country ?? "—"}
                     {doc.total_freight_cost_usd != null ? ` · $${doc.total_freight_cost_usd.toLocaleString()}` : ""}
                   </p>
                 </div>
@@ -435,7 +476,8 @@ export default function UploadPanel({ onExtractSuccess }: UploadPanelProps) {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

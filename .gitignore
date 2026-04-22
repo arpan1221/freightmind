@@ -39,6 +39,10 @@ BMAD_PROJECT_PLAN.md
 DATASET_SCHEMA.md
 TECH_DECISIONS.md
 DAW_AI_SSE_Part 1_Assignment.pdf
+DAW AI SSE Full Assignment (1).pdf
+
+# Runtime processed output — not source
+backend/data/processed/
 
 # Submission drafts
 submission-email.md

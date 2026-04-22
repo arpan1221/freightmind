@@ -41,9 +41,12 @@ export interface ExtractedLineItem {
   confidence: ConfidenceLevel;
 }
 
+export type DocumentType = "commercial_invoice" | "bill_of_lading" | "packing_list";
+
 export interface ExtractionResponse {
   extraction_id: number;
   filename: string;
+  document_type: DocumentType;
   fields: Record<string, ExtractedField>;
   line_items: ExtractedLineItem[];
   low_confidence_fields: string[];
@@ -54,8 +57,10 @@ export interface ExtractionResponse {
 export interface ExtractedDocumentSummary {
   extraction_id: number;
   filename: string;
+  document_type: DocumentType;
   extracted_at: string | null;
   invoice_number: string | null;
+  bl_number: string | null;
   invoice_date: string | null;
   shipment_mode: string | null;
   destination_country: string | null;

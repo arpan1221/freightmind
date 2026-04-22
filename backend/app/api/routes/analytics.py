@@ -50,6 +50,75 @@ _NULL_COL_RE = re.compile(r"(\w+)\s+IS\s+NOT\s+NULL", re.IGNORECASE)
 _SQL_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
+# ── SQL auto-repair: fix known LLM column-name hallucinations ────────
+# When the LLM uses shipments column names on extracted_documents, the query
+# fails with an OperationalError.  These regex replacements fix the most
+# common mismatches *only* when they appear in extracted_documents context.
+
+# Column rewrites: (wrong_name, correct_name) applied only near extracted_documents refs.
+_EXTRACTED_COL_FIXES: list[tuple[re.Pattern[str], str]] = [
+    # freight_cost_usd → total_freight_cost_usd  (but not when already prefixed with total_)
+    (re.compile(r"(?<!\w)(?:e\.|ed\.|extracted_documents\.)freight_cost_usd\b", re.I),
+     lambda m: m.group(0).rsplit(".", 1)[0] + ".total_freight_cost_usd"),
+    # weight_kg → total_weight_kg
+    (re.compile(r"(?<!\w)(?:e\.|ed\.|extracted_documents\.)weight_kg\b", re.I),
+     lambda m: m.group(0).rsplit(".", 1)[0] + ".total_weight_kg"),
+    # line_item_insurance_usd → total_insurance_usd
+    (re.compile(r"(?<!\w)(?:e\.|ed\.|extracted_documents\.)line_item_insurance_usd\b", re.I),
+     lambda m: m.group(0).rsplit(".", 1)[0] + ".total_insurance_usd"),
+    # country → destination_country
+    (re.compile(r"(?<!\w)(?:e\.|ed\.|extracted_documents\.)country\b", re.I),
+     lambda m: m.group(0).rsplit(".", 1)[0] + ".destination_country"),
+    # vendor → carrier_vendor
+    (re.compile(r"(?<!\w)(?:e\.|ed\.|extracted_documents\.)vendor\b", re.I),
+     lambda m: m.group(0).rsplit(".", 1)[0] + ".carrier_vendor"),
+]
+
+# Bare (unprefixed) column-name fix when query ONLY touches extracted_documents
+_BARE_COL_FIXES: list[tuple[str, str]] = [
+    ("freight_cost_usd", "total_freight_cost_usd"),
+    ("weight_kg", "total_weight_kg"),
+    ("line_item_insurance_usd", "total_insurance_usd"),
+]
+
+# strftime returns TEXT; fix integer comparisons like  strftime('%Y',…) = 2014
+_STRFTIME_INT_RE = re.compile(
+    r"(strftime\s*\([^)]+\))\s*=\s*(\d{4})\b", re.I
+)
+
+
+def _auto_repair_sql(sql: str) -> str:
+    """Best-effort fix for known LLM SQL generation mistakes.
+
+    Returns the (possibly rewritten) SQL.  Never raises.
+    """
+    repaired = sql
+
+    # 1. Fix prefixed column names (e.g. e.freight_cost_usd → e.total_freight_cost_usd)
+    if re.search(r"\bextracted_documents\b", repaired, re.I):
+        for pattern, repl in _EXTRACTED_COL_FIXES:
+            repaired = pattern.sub(repl, repaired)
+
+    # 2. Fix bare column names when extracted_documents is the ONLY table
+    if (re.search(r"\bextracted_documents\b", repaired, re.I)
+            and not re.search(r"\bshipments\b", repaired, re.I)):
+        for wrong, right in _BARE_COL_FIXES:
+            # Only replace bare names (not already prefixed with total_)
+            repaired = re.sub(
+                rf"(?<!\w)(?<!total_){re.escape(wrong)}\b",
+                right,
+                repaired,
+                flags=re.I,
+            )
+
+    # 3. Fix strftime integer comparison: = 2014 → = '2014'
+    repaired = _STRFTIME_INT_RE.sub(r"\1 = '\2'", repaired)
+
+    if repaired != sql:
+        logger.info("SQL auto-repair applied:\n  BEFORE: %s\n  AFTER:  %s", sql, repaired)
+
+    return repaired
+
 
 @dataclass(frozen=True)
 class _RowsBundle:
@@ -246,6 +315,8 @@ async def _run_pipeline_to_rows(
                     detail={"sql": sql},
                 ).model_dump(),
             )
+
+        safe_sql = _auto_repair_sql(safe_sql)
 
         try:
             result = db.execute(text(safe_sql))

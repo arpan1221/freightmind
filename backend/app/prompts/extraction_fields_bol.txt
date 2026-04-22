@@ -1,0 +1,40 @@
+Extract the following fields from this Bill of Lading image.
+
+For each field, return a JSON object with "value" and "confidence". Set confidence to:
+- "HIGH" — field is clearly visible and unambiguous
+- "MEDIUM" — field is present but partially obscured, truncated, or inferred
+- "LOW" — field is very hard to read, guessed, or uncertain
+- "NOT_FOUND" — field is absent from the document; set value to null
+
+Return ONLY this JSON structure (no markdown, no code fences):
+{
+  "bl_number": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "shipper_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "consignee_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "origin_country": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "destination_country": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "shipment_mode": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "carrier_vendor": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "vessel_name": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "container_numbers": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "port_of_loading": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "port_of_discharge": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "incoterms": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "total_weight_kg": {"value": number | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "description_of_goods": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "delivery_date": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "hs_code": {"value": string | null, "confidence": "HIGH" | "MEDIUM" | "LOW" | "NOT_FOUND"},
+  "line_items": []
+}
+
+Rules:
+- bl_number: the B/L reference number (e.g. "MAEU123456789", "BL-2024-001"); look for "B/L No.", "Bill of Lading No.", "Reference"
+- vessel_name: ship name (Ocean) or flight number (Air); look for "Vessel", "Flight No.", "Carrier Ref"
+- container_numbers: list ALL container or unit numbers as a comma-separated string (e.g. "MSCU1234567, MSCU7654321")
+- port_of_loading: port where goods are loaded — city name is sufficient
+- port_of_discharge: port where goods are discharged — city name is sufficient
+- delivery_date: date of B/L issue or estimated departure date (ETD); extract as shown
+- shipment_mode: extract as shown (Ocean, Air, Truck); infer from vessel/flight context if not explicit
+- total_weight_kg: gross weight in kg; if given in lbs or tonnes, do NOT convert — extract as shown
+- incoterms: 3-letter code only (e.g. "CIF", "FOB", "EXW")
+- line_items: always return []

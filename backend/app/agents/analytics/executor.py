@@ -6,6 +6,13 @@ from app.services.model_client import ModelClient
 
 _CODE_FENCE_RE = re.compile(r"```(?:sql)?\s*([\s\S]*?)```", re.IGNORECASE)
 
+# Matches UNION [ALL] immediately followed by an opening parenthesis before SELECT.
+# SQLite forbids UNION ALL (SELECT ...) — the paren must be stripped.
+_UNION_WRAPPED_SELECT_RE = re.compile(
+    r"(UNION\s+(?:ALL\s+)?)\(\s*(SELECT\b)",
+    re.IGNORECASE,
+)
+
 # Column name corrections for extracted_documents — the model frequently uses
 # shipments column names when querying extracted_documents.
 # Only applied within extracted_documents context (alias "ed" or table name present).
@@ -63,7 +70,8 @@ class AnalyticsExecutor:
         sql = self._strip_fences(raw)
         sql = self._remove_spurious_null_guards(sql)
         sql = self._rewrite_extract(sql)
-        return self._fix_ed_column_names(sql)
+        sql = self._fix_ed_column_names(sql)
+        return self._fix_union_parentheses(sql)
 
     @staticmethod
     def _strip_fences(text: str) -> str:
@@ -102,6 +110,48 @@ class AnalyticsExecutor:
             return f"{alias}.{correct_col}"
 
         return _ED_COL_RE.sub(_replace, sql)
+
+    @staticmethod
+    def _fix_union_parentheses(sql: str) -> str:
+        """Remove illegal parentheses wrapping SELECT after UNION / UNION ALL.
+
+        SQLite rejects:  UNION ALL (SELECT ...)
+        Correct form is: UNION ALL SELECT ...
+
+        Uses balanced-parenthesis tracking so nested sub-expressions inside
+        the SELECT are not disturbed. Runs in a loop to handle multiple UNION
+        members in the same query.
+        """
+        result = sql
+        while True:
+            m = _UNION_WRAPPED_SELECT_RE.search(result)
+            if not m:
+                break
+
+            # Position of the '(' that wraps the SELECT
+            open_pos = m.start() + m.group(0).index("(")
+
+            # Walk forward to find the matching closing ')'
+            depth = 0
+            close_pos = -1
+            for i in range(open_pos, len(result)):
+                if result[i] == "(":
+                    depth += 1
+                elif result[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        close_pos = i
+                        break
+
+            if close_pos == -1:
+                # Unbalanced — leave as-is rather than corrupt the SQL further
+                break
+
+            # Remove the closing ')' first (higher index), then the opening '('
+            result = result[:close_pos] + result[close_pos + 1:]
+            result = result[:open_pos] + result[open_pos + 1:]
+
+        return result
 
     @staticmethod
     def _remove_spurious_null_guards(sql: str) -> str:

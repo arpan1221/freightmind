@@ -1,0 +1,50 @@
+{
+  "customer_id": "DEMO_CUSTOMER_002",
+  "customer_name": "MedSupply Asia Pte Ltd",
+  "rules": {
+    "hs_code": {
+      "expected": "3004.90.99",
+      "match_type": "exact",
+      "description": "Pharmaceutical preparations HS code per trade agreement TA-2024-MS"
+    },
+    "incoterms": {
+      "expected": "DAP",
+      "match_type": "exact",
+      "description": "Delivered At Place — required per distribution contract DC-2024-12"
+    },
+    "consignee_name": {
+      "expected": "MedSupply Asia",
+      "match_type": "contains",
+      "description": "Consignee must include the MedSupply Asia legal entity name"
+    },
+    "port_of_loading": {
+      "expected": "Chennai",
+      "match_type": "contains",
+      "description": "Origin port per supplier agreement SA-IN-022 (GMP-certified facility)"
+    },
+    "port_of_discharge": {
+      "expected": "Singapore",
+      "match_type": "contains",
+      "description": "Destination port per routing agreement RA-SG-007"
+    },
+    "shipment_mode": {
+      "expected": "Air",
+      "match_type": "exact",
+      "description": "Air freight required for pharmaceutical cold-chain compliance CC-2024-MS"
+    },
+    "origin_country": {
+      "expected": "India",
+      "match_type": "contains",
+      "description": "Goods must originate from India per GMP-certified supplier SA-IN-022"
+    },
+    "invoice_number": {
+      "expected": "MS-",
+      "match_type": "contains",
+      "description": "Invoice number must use the MedSupply prefix MS- per billing procedure BP-MS-001"
+    }
+  },
+  "confidence_thresholds": {
+    "uncertain_below": 0.6,
+    "low_confidence_value": 0.3
+  }
+}

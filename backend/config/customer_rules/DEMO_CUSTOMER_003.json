@@ -1,0 +1,40 @@
+{
+  "customer_id": "DEMO_CUSTOMER_003",
+  "customer_name": "EuroParts Distribution GmbH",
+  "rules": {
+    "incoterms": {
+      "expected": "CIF",
+      "match_type": "exact",
+      "description": "CIF required per logistics framework LF-2024-EP"
+    },
+    "port_of_loading": {
+      "expected": "Shanghai",
+      "match_type": "contains",
+      "description": "Shanghai origin port per supplier agreement SA-CN-011"
+    },
+    "port_of_discharge": {
+      "expected": "Rotterdam",
+      "match_type": "contains",
+      "description": "Rotterdam destination per routing agreement RA-NL-003"
+    },
+    "shipment_mode": {
+      "expected": "Ocean",
+      "match_type": "exact",
+      "description": "Ocean freight required per cost framework CF-2024-EP"
+    },
+    "origin_country": {
+      "expected": "China",
+      "match_type": "contains",
+      "description": "Goods must originate from China per supply contract SC-EP-2024"
+    },
+    "consignee_name": {
+      "expected": "EuroParts",
+      "match_type": "contains",
+      "description": "Consignee must include EuroParts entity name per billing procedure BP-EP-001"
+    }
+  },
+  "confidence_thresholds": {
+    "uncertain_below": 0.6,
+    "low_confidence_value": 0.3
+  }
+}

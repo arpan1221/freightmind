@@ -61,14 +61,15 @@ class ModelClient:
         )
 
     @classmethod
-    def for_analytics(cls, timeout: float = 5.0) -> "ModelClient":
+    def for_analytics(cls, timeout: float | None = None) -> "ModelClient":
         """Return a ModelClient wired to the configured analytics provider."""
+        resolved_timeout = timeout if timeout is not None else settings.analytics_timeout
         if settings.analytics_provider == "ollama":
-            return cls(base_url=settings.ollama_base_url, api_key="ollama", timeout=timeout)
+            return cls(base_url=settings.ollama_base_url, api_key="ollama", timeout=resolved_timeout)
         return cls(
             base_url=cls._OPENROUTER_BASE_URL,
             api_key=settings.openrouter_api_key or "",  # validator ensures non-None at startup
-            timeout=timeout,
+            timeout=resolved_timeout,
         )
 
     @classmethod

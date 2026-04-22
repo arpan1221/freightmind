@@ -23,3 +23,38 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  # ── Document trigger: folder watcher ──────────────────────────────────────
+  # Monitors backend/data/incoming/ and auto-submits trade documents to the
+  # verification pipeline when files are dropped in.
+  #
+  # Drop a single file for single-doc verification:
+  #   incoming/DEMO_CUSTOMER_001/invoice.pdf
+  #
+  # Drop 2-3 files into a subdirectory for batch verification:
+  #   incoming/DEMO_CUSTOMER_001/shipment-set/demo_shipment_CI.pdf
+  #   incoming/DEMO_CUSTOMER_001/shipment-set/demo_shipment_BL.pdf
+  #   incoming/DEMO_CUSTOMER_001/shipment-set/demo_shipment_PL.pdf
+  #
+  # Quick batch demo (from repo root):
+  #   mkdir -p backend/data/incoming/DEMO_CUSTOMER_001/demo-batch
+  #   cp backend/data/demo_invoices/demo_shipment_*.pdf backend/data/incoming/DEMO_CUSTOMER_001/demo-batch/
+  watcher:
+    build: ./backend
+    command: uv run python scripts/folder_watcher.py
+    env_file: .env
+    environment:
+      # Use polling because Docker Desktop on macOS doesn't relay FSEvents into containers
+      - WATCH_POLL=1
+      - WATCH_DIR=/app/incoming
+      - PROCESSED_DIR=/app/processed
+      # Connect to the backend container via its service name
+      - API_BASE_URL=http://backend:8000
+      - BUNDLE_QUIET_SEC=3
+    volumes:
+      - ./backend/cache:/app/cache
+      - ./backend/data/incoming:/app/incoming
+      - ./backend/data/processed:/app/processed
+    depends_on:
+      - backend
+    restart: unless-stopped
